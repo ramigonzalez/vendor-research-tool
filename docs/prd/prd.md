@@ -50,7 +50,9 @@ The SignalCore Vendor Research Tool is a **technical engineering evaluation assi
 
 **Impact Assessment**: Major Impact — new codebase, all components built from spec.
 
-### 1.5 Goals
+### 1.5 Goals & Constraints
+
+**Hard Constraint**: This is a **2–3 hour time-boxed prototype** built by a single developer. All MoSCoW prioritization and architectural decisions are driven by this constraint. The goal is a working demo for a Zoom evaluation, not a production system.
 
 - Deliver a runnable local tool: `git clone → pip install → uvicorn → works`
 - Collect evidence from real, recent, citable web sources (not static LLM knowledge)
@@ -77,7 +79,7 @@ The three planning documents represent a progressive refinement process: Documen
 - **FR4**: The system shall implement evidence sufficiency checking with deterministic thresholds: ≥2 sources, ≥1 authoritative source (official_docs or github), ≥1 source with relevance ≥0.5. Maximum 2 research iterations.
 - **FR5**: The system shall compute per-requirement scores (0–10) using a hybrid LLM+algorithmic approach: Capability Coverage (40%), Evidence Strength (30%), Maturity (20%), Limitations penalty (10%).
 - **FR6**: The system shall compute confidence scores (0–1) fully deterministically from evidence metadata: Source Count (30%), Source Authority (30%), Source Recency (25%), Consistency (15%).
-- **FR7**: The system shall compute weighted vendor rankings: `score × priority_weight × confidence`, normalized to 0–100.
+- **FR7**: The system shall compute weighted vendor rankings: `Σ(score × priority_weight × confidence)` where priority weights are High=3.0, Medium=2.0, Low=1.0, normalized to 0–100.
 - **FR8**: The system shall persist all jobs, evidence, and scores in SQLite using a `ResearchRepository` interface with aiosqlite.
 - **FR9**: The system shall expose a `POST /api/research` endpoint that triggers the pipeline and streams real-time progress via Server-Sent Events.
 - **FR10**: The system shall expose a `GET /api/research/{job_id}` endpoint to retrieve cached results.
@@ -251,7 +253,9 @@ vendor-research-tool/
 | 5 | Polish & Delivery | 4 | 7 | Should Have + Could Have |
 
 **Build Order (Critical Path)**:
-`E2-S1 → E3-S1 → E3-S2 → E1-S1 → E1-S2 → E1-S3 → E1-S4 → E2-S2 → E2-S3 → E2-S4 → E2-S5 → E1-S5 → E3-S3 → E3-S4 → E3-S5 → E3-S6 → E4-S5 → E4-S1 → E4-S2 → E4-S3 → E4-S4 → E5-S1 → E5-S2 → E5-S3 → E5-S4`
+`E5-S1 → E2-S1 → E3-S1 → E3-S2 → E1-S1 → E1-S2 → E1-S3 → E1-S4 → E2-S2 → E2-S3 → E2-S4 → E2-S5 → E1-S5 → E3-S3 → E3-S4 → E3-S5 → E3-S6 → E4-S5 → E4-S1 → E4-S2 → E4-S3 → E4-S4 → E5-S2 → E5-S3 → E5-S4`
+
+> **Note**: E5-S1 (Project Setup) is the critical-path first story — it creates the project scaffold (`config.py`, `.env`, `requirements.txt`, package structure) that all other stories depend on. It is Must Have despite being in Epic 5.
 
 > See individual epic files in `docs/prd/` for full story breakdowns.
 
@@ -268,14 +272,21 @@ vendor-research-tool/
 | PostHog | Medium-Low | Product analytics first, LLM features secondary |
 
 ### Requirements
-| ID | Requirement | Priority | Weight |
-|----|-------------|----------|--------|
-| R1 | Framework-agnostic tracing | High | 0.25 |
-| R2 | Self-hosting support | High | 0.25 |
-| R3 | Evaluation framework | Medium | 0.20 |
-| R4 | OpenTelemetry integration | Medium | 0.15 |
-| R5 | Custom metrics | Low | 0.10 |
-| R6 | Cost transparency | Low | 0.05 |
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| R1 | Framework-agnostic tracing | High |
+| R2 | Self-hosting support | High |
+| R3 | Evaluation framework | Medium |
+| R4 | OpenTelemetry integration | Medium |
+| R5 | Custom metrics | Low |
+| R6 | Cost transparency | Low |
+
+**Priority Weights** (used in weighted ranking formula — see FR7):
+- High = 3.0
+- Medium = 2.0
+- Low = 1.0
+
+> Weights are derived from priority categories, not assigned per-requirement. This matches the scoring methodology defined in the planning documents (Doc 1 §2.5 Layer 3, Doc 2 `compute_overall_rankings()` implementation).
 
 ---
 
