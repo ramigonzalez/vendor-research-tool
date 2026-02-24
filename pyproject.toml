@@ -1,0 +1,30 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501", "UP042"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_models.py" = ["I001", "F401", "UP017"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+include = ["app"]
+exclude = ["tests", "**/__pycache__"]
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["-x", "--tb=short", "--cov=app", "--cov-report=term-missing", "--cov-fail-under=60"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/__init__.py", "app/*/__init__.py"]
