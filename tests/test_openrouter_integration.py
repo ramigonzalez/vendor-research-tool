@@ -30,6 +30,10 @@ requires_openrouter = pytest.mark.skipif(
 )
 
 
+DEFAULT_MODEL = os.environ.get("LLM_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+DEFAULT_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+
 @requires_openrouter
 @pytest.mark.asyncio
 async def test_openrouter_basic_completion() -> None:
@@ -37,9 +41,9 @@ async def test_openrouter_basic_completion() -> None:
     from langchain_openai import ChatOpenAI
 
     llm = ChatOpenAI(
-        model="meta-llama/llama-3.3-70b-instruct:free",
+        model=DEFAULT_MODEL,
         temperature=0,
-        base_url="https://openrouter.ai/api/v1",
+        base_url=DEFAULT_BASE_URL,
         api_key=os.environ["OPENROUTER_API_KEY"],
     )
     result = await llm.ainvoke("Reply with exactly: hello")
@@ -55,9 +59,9 @@ async def test_openrouter_json_output() -> None:
     from langchain_openai import ChatOpenAI
 
     llm = ChatOpenAI(
-        model="meta-llama/llama-3.3-70b-instruct:free",
+        model=DEFAULT_MODEL,
         temperature=0,
-        base_url="https://openrouter.ai/api/v1",
+        base_url=DEFAULT_BASE_URL,
         api_key=os.environ["OPENROUTER_API_KEY"],
     )
     result = await llm.ainvoke(

@@ -18,6 +18,7 @@ def _patch_settings(**overrides: str | float):
         "ANTHROPIC_API_KEY": "",
         "OPENAI_API_KEY": "",
         "OPENROUTER_API_KEY": "",
+        "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
     }
     defaults.update(overrides)
 

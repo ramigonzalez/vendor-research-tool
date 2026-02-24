@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     TAVILY_API_KEY: str
 
     model_config = {"env_file": ".env"}
@@ -44,7 +45,7 @@ def get_llm():
         return ChatOpenAI(
             model=settings.LLM_MODEL,
             temperature=settings.LLM_TEMPERATURE,
-            base_url="https://openrouter.ai/api/v1",
+            base_url=settings.OPENROUTER_BASE_URL,
             api_key=SecretStr(settings.OPENROUTER_API_KEY),
         )
 
