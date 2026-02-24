@@ -150,7 +150,7 @@ async def execute_searches(state: ResearchState) -> dict:
 # Story 1.3 - Structured Evidence Extraction
 # ---------------------------------------------------------------------------
 
-from app.models import Evidence, SourceType  # noqa: E402
+from app.models import Evidence, GapType, SourceType  # noqa: E402
 from app.prompts.extraction import (  # noqa: E402
     EVIDENCE_EXTRACTION_SYSTEM_PROMPT,
     EVIDENCE_EXTRACTION_USER_TEMPLATE,
@@ -255,3 +255,251 @@ async def extract_evidence(state: ResearchState) -> dict:
 
     await emit_progress(state, "research", 50, "Evidence extraction complete")
     return {"evidence": evidence}
+
+
+# ---------------------------------------------------------------------------
+# Story 1.4 - Evidence Gap Analysis & Research Loop
+# ---------------------------------------------------------------------------
+
+
+def check_evidence_sufficiency(evidence: list[Evidence]) -> bool:
+    """Check if evidence meets minimum quality thresholds."""
+    if len(evidence) < 2:
+        return False
+    has_authoritative = any(e.source_type in (SourceType.official_docs, SourceType.github) for e in evidence)
+    if not has_authoritative:
+        return False
+    has_relevant = any(e.relevance >= 0.5 for e in evidence)
+    return has_relevant
+
+
+def diagnose_gap(evidence: list[Evidence]) -> GapType:
+    """Classify the type of evidence gap."""
+    if not evidence:
+        return GapType.no_evidence
+    if not any(e.source_type in (SourceType.official_docs, SourceType.github) for e in evidence):
+        return GapType.no_authoritative_source
+    if not any(e.relevance >= 0.5 for e in evidence):
+        return GapType.low_relevance
+    return GapType.insufficient_count
+
+
+def find_evidence_gaps(state: ResearchState) -> list[tuple[str, str]]:
+    """Find vendor-requirement pairs that need more evidence."""
+    evidence = state.get("evidence", {})
+    gaps: list[tuple[str, str]] = []
+    vendors = state.get("vendors", [])
+    requirements = state.get("requirements", [])
+    for vendor in vendors:
+        for req in requirements:
+            ev_list = evidence.get(vendor, {}).get(req.id, [])
+            if not check_evidence_sufficiency(ev_list):
+                gaps.append((vendor, req.id))
+    return gaps
+
+
+def should_continue_research(state: ResearchState) -> str:
+    """LangGraph conditional edge: continue research or proceed to scoring."""
+    iteration = state.get("iteration", 0)
+    if iteration >= 2:
+        return "proceed"
+    gaps = find_evidence_gaps(state)
+    if gaps:
+        return "continue"
+    return "proceed"
+
+
+def generate_refined_queries(vendor: str, requirement_desc: str, gap_type: GapType) -> list[str]:
+    """Generate refined queries based on gap type."""
+    if gap_type == GapType.no_evidence:
+        return [
+            f"{vendor} {requirement_desc} overview features",
+            f"{vendor} {requirement_desc} monitoring observability alternative terms",
+        ]
+    elif gap_type == GapType.no_authoritative_source:
+        return [
+            f"{vendor} {requirement_desc} site:github.com",
+            f"{vendor} {requirement_desc} site:docs.{vendor.lower()}.com",
+        ]
+    elif gap_type == GapType.low_relevance:
+        words = requirement_desc.split()[:3]
+        specific = " ".join(words)
+        return [
+            f"{vendor} {specific} detailed documentation",
+            f"{vendor} {specific} technical specification",
+        ]
+    else:  # insufficient_count
+        return [
+            f"{vendor} {requirement_desc} changelog release notes",
+            f"{vendor} {requirement_desc} community discussion forum",
+        ]
+
+
+async def prepare_gap_filling(state: ResearchState) -> dict:
+    """LangGraph node: prepare refined queries for gap-filling iteration."""
+    gaps = find_evidence_gaps(state)
+    requirements = state.get("requirements", [])
+    req_map = {r.id: r for r in requirements}
+
+    gap_metadata: list[dict] = []
+    new_queries: dict[str, list[str]] = {}
+
+    for vendor, req_id in gaps:
+        ev_list = state.get("evidence", {}).get(vendor, {}).get(req_id, [])
+        gap_type = diagnose_gap(ev_list)
+        gap_metadata.append({"vendor": vendor, "requirement_id": req_id, "gap_type": gap_type.value})
+
+        req = req_map.get(req_id)
+        if req:
+            key = f"{vendor}:{req_id}"
+            new_queries[key] = generate_refined_queries(vendor, req.description, gap_type)
+
+    iteration = state.get("iteration", 0)
+    return {
+        "queries": new_queries,
+        "gaps": gap_metadata,
+        "iteration": iteration + 1,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Story 2.2 - LLM Capability Assessment
+# ---------------------------------------------------------------------------
+
+from app.models import CapabilityLevel, LLMAssessment, MaturityLevel  # noqa: E402
+from app.prompts.assessment import (  # noqa: E402
+    CAPABILITY_ASSESSMENT_SYSTEM_PROMPT,
+    CAPABILITY_ASSESSMENT_USER_TEMPLATE,
+)
+
+
+def _format_evidence_for_llm(evidence: list[Evidence]) -> str:
+    """Format evidence list for LLM consumption, sorted by relevance."""
+    lines: list[str] = []
+    for i, e in enumerate(sorted(evidence, key=lambda x: -x.relevance)):
+        lines.append(f"{i + 1}. [{e.source_type.value}] (relevance: {e.relevance:.2f})")
+        lines.append(f"   Claim: {e.claim[:500]}")
+        lines.append(f"   Source: {e.source_name} ({e.source_url[:80]})")
+        lines.append(f"   Supports: {e.supports_requirement}")
+    return "\n".join(lines)
+
+
+_DEFAULT_ASSESSMENT = LLMAssessment(
+    capability_level=CapabilityLevel.unknown,
+    capability_details="Assessment failed",
+    maturity=MaturityLevel.unknown,
+    limitations=[],
+    supports_requirement=False,
+)
+
+
+async def _assess_single_pair(
+    llm: ChatAnthropic,
+    parser: JsonOutputParser,
+    vendor: str,
+    requirement: Requirement,
+    evidence: list[Evidence],
+) -> tuple[str, str, LLMAssessment]:
+    """Assess a single vendor-requirement pair."""
+    req_id = requirement.id
+
+    # Filter evidence to relevance >= 0.3
+    filtered = [e for e in evidence if e.relevance >= 0.3]
+
+    if not filtered:
+        return vendor, req_id, _DEFAULT_ASSESSMENT
+
+    formatted = _format_evidence_for_llm(filtered)
+    user_content = CAPABILITY_ASSESSMENT_USER_TEMPLATE.format(
+        vendor=vendor,
+        requirement=requirement.description,
+        priority=requirement.priority.value,
+        formatted_evidence=formatted,
+    )
+
+    try:
+        messages = [
+            SystemMessage(content=CAPABILITY_ASSESSMENT_SYSTEM_PROMPT),
+            HumanMessage(content=user_content),
+        ]
+        result = await llm.ainvoke(messages)
+        parsed = await parser.ainvoke(result)
+
+        assessment = LLMAssessment(
+            capability_level=CapabilityLevel(parsed.get("capability_level", "unknown")),
+            capability_details=str(parsed.get("capability_details", "")),
+            maturity=MaturityLevel(parsed.get("maturity", "unknown")),
+            limitations=list(parsed.get("limitations", [])),
+            supports_requirement=bool(parsed.get("supports_requirement", False)),
+        )
+        return vendor, req_id, assessment
+    except Exception:
+        logger.warning("Assessment failed for %s:%s, using default", vendor, req_id, exc_info=True)
+        return vendor, req_id, _DEFAULT_ASSESSMENT
+
+
+async def assess_capabilities(state: ResearchState) -> dict:
+    """LangGraph node: produce LLMAssessment for all vendor-requirement pairs."""
+    vendors = state.get("vendors", [])
+    requirements = state.get("requirements", [])
+    evidence_map = state.get("evidence", {})
+
+    llm = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)  # type: ignore[call-arg]
+    parser = JsonOutputParser()
+
+    tasks = []
+    for vendor in vendors:
+        for req in requirements:
+            ev = evidence_map.get(vendor, {}).get(req.id, [])
+            tasks.append(_assess_single_pair(llm, parser, vendor, req, ev))
+
+    results = await asyncio.gather(*tasks)
+
+    assessments: dict[str, dict[str, LLMAssessment]] = {}
+    for vendor, req_id, assessment in results:
+        if vendor not in assessments:
+            assessments[vendor] = {}
+        assessments[vendor][req_id] = assessment
+
+    await emit_progress(state, "scoring", 65, "Capability assessments complete")
+    return {"assessments": assessments}
+
+
+# ---------------------------------------------------------------------------
+# Story 2.3 - Deterministic Score Computation
+# ---------------------------------------------------------------------------
+
+from app.models import ScoreResult  # noqa: E402
+from app.scoring.engine import compute_confidence, compute_requirement_score  # noqa: E402
+
+
+async def compute_scores(state: ResearchState) -> dict:
+    """LangGraph node: compute scores for all vendor-requirement pairs."""
+    vendors = state.get("vendors", [])
+    requirements = state.get("requirements", [])
+    evidence_map = state.get("evidence", {})
+    assessments_map = state.get("assessments", {})
+
+    scores: dict[str, dict[str, ScoreResult]] = {}
+
+    for vendor in vendors:
+        scores[vendor] = {}
+        for req in requirements:
+            ev = evidence_map.get(vendor, {}).get(req.id, [])
+            assessment = assessments_map.get(vendor, {}).get(req.id, _DEFAULT_ASSESSMENT)
+
+            score = compute_requirement_score(assessment, ev)
+            confidence = compute_confidence(ev)
+
+            scores[vendor][req.id] = ScoreResult(
+                score=score,
+                confidence=confidence,
+                capability_level=assessment.capability_level,
+                maturity=assessment.maturity,
+                justification=assessment.capability_details,
+                limitations=assessment.limitations,
+                evidence=ev,
+            )
+
+    await emit_progress(state, "scoring", 80, "Score computation complete")
+    return {"scores": scores}

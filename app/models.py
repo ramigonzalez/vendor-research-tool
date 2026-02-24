@@ -53,6 +53,15 @@ class Priority(str, Enum):
     low = "low"
 
 
+class GapType(str, Enum):
+    """Types of evidence gaps."""
+
+    no_evidence = "no_evidence"
+    no_authoritative_source = "no_authoritative_source"
+    low_relevance = "low_relevance"
+    insufficient_count = "insufficient_count"
+
+
 class Evidence(BaseModel):
     """A piece of evidence supporting or refuting a claim about a vendor."""
 

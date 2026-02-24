@@ -181,3 +181,112 @@ class TestDateParsing:
         evidence = [_make_evidence(content_date=None)]
         result = compute_confidence(evidence)
         assert result > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Story 2.3 - Deterministic Score Computation Tests
+# ---------------------------------------------------------------------------
+
+import pytest  # noqa: E402
+
+from app.models import CapabilityLevel, LLMAssessment, MaturityLevel  # noqa: E402
+from app.scoring.engine import (  # noqa: E402
+    CAPABILITY_SCORES,
+    MATURITY_SCORES,
+    compute_requirement_score,
+)
+
+
+def _make_assessment(
+    capability: CapabilityLevel = CapabilityLevel.full,
+    maturity: MaturityLevel = MaturityLevel.ga,
+    limitations: list[str] | None = None,
+) -> LLMAssessment:
+    """Helper to create an LLMAssessment with sensible defaults."""
+    return LLMAssessment(
+        capability_level=capability,
+        capability_details="Test details",
+        maturity=maturity,
+        limitations=limitations or [],
+        supports_requirement=True,
+    )
+
+
+class TestComputeRequirementScore:
+    """Tests for compute_requirement_score pure function."""
+
+    def test_full_ga_5_supporting_0_limitations(self) -> None:
+        """full + ga + 5 supporting + 0 limitations -> score ~ 10.0."""
+        assessment = _make_assessment(CapabilityLevel.full, MaturityLevel.ga, [])
+        evidence = [_make_evidence(supports=True) for _ in range(5)]
+        score = compute_requirement_score(assessment, evidence)
+        assert score == 10.0, f"Expected 10.0, got {score}"
+
+    def test_none_unknown_0_supporting_0_limitations(self) -> None:
+        """none + unknown + 0 supporting + 0 limitations -> 1.6."""
+        assessment = _make_assessment(CapabilityLevel.none, MaturityLevel.unknown, [])
+        score = compute_requirement_score(assessment, [])
+        # 0.4*0 + 0.3*0 + 0.2*3 + 0.1*10 = 0 + 0 + 0.6 + 1.0 = 1.6
+        assert score == 1.6, f"Expected 1.6, got {score}"
+
+    def test_unknown_unknown_0_supporting_0_limitations(self) -> None:
+        """unknown + unknown + 0 supporting + 0 limitations -> 2.4."""
+        assessment = _make_assessment(CapabilityLevel.unknown, MaturityLevel.unknown, [])
+        score = compute_requirement_score(assessment, [])
+        # 0.4*2 + 0.3*0 + 0.2*3 + 0.1*10 = 0.8 + 0 + 0.6 + 1.0 = 2.4
+        assert score == pytest.approx(2.4), f"Expected 2.4, got {score}"
+
+    def test_limitations_clamped_at_zero(self) -> None:
+        """5 limitations -> limitations_score = max(0, 10-10) = 0, not negative."""
+        assessment = _make_assessment(CapabilityLevel.full, MaturityLevel.ga, ["a", "b", "c", "d", "e"])
+        evidence = [_make_evidence(supports=True) for _ in range(5)]
+        score = compute_requirement_score(assessment, evidence)
+        # 0.4*10 + 0.3*10 + 0.2*10 + 0.1*0 = 4+3+2+0 = 9.0
+        assert score == 9.0, f"Expected 9.0, got {score}"
+
+    def test_evidence_count_capped_at_5(self) -> None:
+        """6 supporting evidence should produce same score as 5."""
+        assessment = _make_assessment(CapabilityLevel.full, MaturityLevel.ga, [])
+        ev_5 = [_make_evidence(supports=True) for _ in range(5)]
+        ev_6 = [_make_evidence(supports=True) for _ in range(6)]
+        score_5 = compute_requirement_score(assessment, ev_5)
+        score_6 = compute_requirement_score(assessment, ev_6)
+        assert score_5 == score_6, f"Expected equal scores, got {score_5} vs {score_6}"
+
+    def test_partial_beta_3_supporting_1_limitation(self) -> None:
+        """partial + beta + 3 supporting + 1 limitation -> specific calculation."""
+        assessment = _make_assessment(CapabilityLevel.partial, MaturityLevel.beta, ["limit1"])
+        evidence = [_make_evidence(supports=True) for _ in range(3)]
+        score = compute_requirement_score(assessment, evidence)
+        # capability: 0.4*7 = 2.8
+        # evidence: 0.3*(3/5*10) = 0.3*6 = 1.8
+        # maturity: 0.2*7 = 1.4
+        # limitations: 0.1*(10-2) = 0.1*8 = 0.8
+        # total = 2.8 + 1.8 + 1.4 + 0.8 = 6.8
+        assert score == 6.8, f"Expected 6.8, got {score}"
+
+
+class TestCapabilityAndMaturityScores:
+    """Verify lookup table values."""
+
+    def test_capability_scores_values(self) -> None:
+        assert CAPABILITY_SCORES[CapabilityLevel.full] == 10.0
+        assert CAPABILITY_SCORES[CapabilityLevel.partial] == 7.0
+        assert CAPABILITY_SCORES[CapabilityLevel.minimal] == 3.0
+        assert CAPABILITY_SCORES[CapabilityLevel.none] == 0.0
+        assert CAPABILITY_SCORES[CapabilityLevel.unknown] == 2.0
+
+    def test_capability_scores_complete(self) -> None:
+        for level in CapabilityLevel:
+            assert level in CAPABILITY_SCORES, f"Missing score for {level}"
+
+    def test_maturity_scores_values(self) -> None:
+        assert MATURITY_SCORES[MaturityLevel.ga] == 10.0
+        assert MATURITY_SCORES[MaturityLevel.beta] == 7.0
+        assert MATURITY_SCORES[MaturityLevel.experimental] == 4.0
+        assert MATURITY_SCORES[MaturityLevel.planned] == 2.0
+        assert MATURITY_SCORES[MaturityLevel.unknown] == 3.0
+
+    def test_maturity_scores_complete(self) -> None:
+        for level in MaturityLevel:
+            assert level in MATURITY_SCORES, f"Missing score for {level}"

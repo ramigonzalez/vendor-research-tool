@@ -619,3 +619,187 @@ class TestExtractEvidence:
         # The formatted content should contain truncated text (2000 x's, not 5000)
         assert "x" * 2000 in user_msg_content
         assert "x" * 2001 not in user_msg_content
+
+
+# ---------------------------------------------------------------------------
+# Story 2.2 - assess_capabilities tests
+# ---------------------------------------------------------------------------
+
+from app.graph.nodes import assess_capabilities  # noqa: E402
+from app.models import CapabilityLevel, LLMAssessment, MaturityLevel  # noqa: E402
+
+
+def _make_evidence(
+    relevance: float = 0.8,
+    claim: str = "Vendor supports this feature",
+    supports: bool = True,
+) -> Evidence:
+    """Create a test Evidence object."""
+    return Evidence(
+        claim=claim,
+        source_url="https://example.com/doc",
+        source_name="Example Docs",
+        source_type=SourceType.official_docs,
+        content_date="2025-01",
+        relevance=relevance,
+        supports_requirement=supports,
+    )
+
+
+def _make_assessment_state(
+    vendors: list[str] | None = None,
+    requirements: list[Requirement] | None = None,
+    evidence: dict | None = None,
+) -> ResearchState:
+    """Create a minimal ResearchState for assessment tests."""
+    state: ResearchState = {
+        "vendors": vendors if vendors is not None else VENDORS,
+        "requirements": requirements if requirements is not None else REQUIREMENTS,
+        "evidence": evidence if evidence is not None else {},
+    }
+    return state
+
+
+_MOCK_LLM_ASSESSMENT_RESPONSE = {
+    "capability_level": "full",
+    "capability_details": "Fully supported with native integration",
+    "maturity": "ga",
+    "limitations": ["Requires v2.0+"],
+    "supports_requirement": True,
+}
+
+
+class TestAssessCapabilities:
+    @pytest.mark.asyncio
+    async def test_all_24_pairs_assessed(self) -> None:
+        """4 vendors x 6 requirements = 24 assessment pairs."""
+        # Build evidence so every pair has at least one relevant item
+        evidence: dict[str, dict[str, list[Evidence]]] = {}
+        for vendor in VENDORS:
+            evidence[vendor] = {}
+            for req in REQUIREMENTS:
+                evidence[vendor][req.id] = [_make_evidence()]
+
+        state = _make_assessment_state(evidence=evidence)
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("{}"))
+
+        mock_parser = AsyncMock()
+        mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_ASSESSMENT_RESPONSE)
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await assess_capabilities(state)
+
+        assessments = result["assessments"]
+        total_pairs = sum(len(reqs) for reqs in assessments.values())
+        assert total_pairs == 24
+
+        for vendor in VENDORS:
+            assert vendor in assessments
+            for req in REQUIREMENTS:
+                assert req.id in assessments[vendor]
+
+    @pytest.mark.asyncio
+    async def test_fallback_on_llm_exception(self) -> None:
+        """When LLM raises an exception, the default assessment is used."""
+        evidence = {"LangSmith": {"R1": [_make_evidence()]}}
+        state = _make_assessment_state(
+            vendors=["LangSmith"],
+            requirements=[Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high)],
+            evidence=evidence,
+        )
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM failure"))
+
+        mock_parser = AsyncMock()
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await assess_capabilities(state)
+
+        assessment = result["assessments"]["LangSmith"]["R1"]
+        assert assessment.capability_level == CapabilityLevel.unknown
+        assert assessment.capability_details == "Assessment failed"
+        assert assessment.maturity == MaturityLevel.unknown
+        assert assessment.supports_requirement is False
+
+    @pytest.mark.asyncio
+    async def test_low_relevance_evidence_filtered(self) -> None:
+        """Evidence with relevance < 0.3 is filtered out; if none remain, default is used."""
+        low_relevance_evidence = [_make_evidence(relevance=0.1), _make_evidence(relevance=0.2)]
+        evidence = {"LangSmith": {"R1": low_relevance_evidence}}
+        state = _make_assessment_state(
+            vendors=["LangSmith"],
+            requirements=[Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high)],
+            evidence=evidence,
+        )
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("{}"))
+
+        mock_parser = AsyncMock()
+        mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_ASSESSMENT_RESPONSE)
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await assess_capabilities(state)
+
+        assessment = result["assessments"]["LangSmith"]["R1"]
+        # Should be default since all evidence was below 0.3
+        assert assessment.capability_level == CapabilityLevel.unknown
+        assert assessment.capability_details == "Assessment failed"
+        # LLM should NOT have been called
+        mock_llm.ainvoke.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_returns_partial_state_dict(self) -> None:
+        """Node must return dict with only 'assessments' key (LangGraph pattern)."""
+        state = _make_assessment_state(vendors=["LangSmith"], requirements=[], evidence={})
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic"),
+            patch("app.graph.nodes.JsonOutputParser"),
+        ):
+            result = await assess_capabilities(state)
+
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["assessments"]
+
+    @pytest.mark.asyncio
+    async def test_valid_llm_assessment_structure(self) -> None:
+        """Result contains valid LLMAssessment objects with correct fields."""
+        evidence = {"LangSmith": {"R1": [_make_evidence()]}}
+        state = _make_assessment_state(
+            vendors=["LangSmith"],
+            requirements=[Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high)],
+            evidence=evidence,
+        )
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("{}"))
+
+        mock_parser = AsyncMock()
+        mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_ASSESSMENT_RESPONSE)
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await assess_capabilities(state)
+
+        assessment = result["assessments"]["LangSmith"]["R1"]
+        assert isinstance(assessment, LLMAssessment)
+        assert assessment.capability_level == CapabilityLevel.full
+        assert assessment.capability_details == "Fully supported with native integration"
+        assert assessment.maturity == MaturityLevel.ga
+        assert assessment.limitations == ["Requires v2.0+"]
+        assert assessment.supports_requirement is True

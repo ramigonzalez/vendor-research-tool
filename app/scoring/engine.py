@@ -93,3 +93,38 @@ def compute_confidence(evidence: list[Evidence]) -> float:
     )
 
     return max(0.0, min(1.0, raw))
+
+
+# ---------------------------------------------------------------------------
+# Story 2.3 - Deterministic Score Computation
+# ---------------------------------------------------------------------------
+
+from app.models import CapabilityLevel, LLMAssessment, MaturityLevel  # noqa: E402
+
+CAPABILITY_SCORES: dict[CapabilityLevel, float] = {
+    CapabilityLevel.full: 10.0,
+    CapabilityLevel.partial: 7.0,
+    CapabilityLevel.minimal: 3.0,
+    CapabilityLevel.none: 0.0,
+    CapabilityLevel.unknown: 2.0,
+}
+
+MATURITY_SCORES: dict[MaturityLevel, float] = {
+    MaturityLevel.ga: 10.0,
+    MaturityLevel.beta: 7.0,
+    MaturityLevel.experimental: 4.0,
+    MaturityLevel.planned: 2.0,
+    MaturityLevel.unknown: 3.0,
+}
+
+
+def compute_requirement_score(assessment: LLMAssessment, evidence: list[Evidence]) -> float:
+    """Compute a 0-10 score from assessment and evidence. Pure function."""
+    capability_score = CAPABILITY_SCORES[assessment.capability_level]
+    supporting = [e for e in evidence if e.supports_requirement]
+    evidence_score = min(len(supporting), 5) / 5 * 10
+    maturity_score = MATURITY_SCORES[assessment.maturity]
+    limitations_score = max(0.0, 10.0 - len(assessment.limitations) * 2.0)
+
+    score = 0.40 * capability_score + 0.30 * evidence_score + 0.20 * maturity_score + 0.10 * limitations_score
+    return max(0.0, min(10.0, score))
