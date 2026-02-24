@@ -5,51 +5,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SignalCore Vendor Research Tool</title>
     <style>
+        /* Custom properties */
+        :root {
+            --color-high: #2ecc71;
+            --color-medium: #f39c12;
+            --color-low: #e74c3c;
+            --color-bg: #f8f9fa;
+            --color-surface: #ffffff;
+            --color-text: #2c3e50;
+            --font-stack: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
         /* Base */
-        body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f6fa; }
-        h1 { color: #1a1a2e; }
+        body { font-family: var(--font-stack); font-size: 16px; max-width: 1200px; margin: 0 auto; padding: 20px 24px; background: #f5f6fa; color: var(--color-text); }
+        h1 { color: #1a1a2e; font-size: 24px; }
+        h2 { font-size: 24px; }
         .hidden { display: none; }
 
         /* Matrix table */
-        .table-scroll { overflow-x: auto; }
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         #comparison-matrix { border-collapse: collapse; width: 100%; min-width: 600px; }
-        #comparison-matrix th, #comparison-matrix td { padding: 10px 14px; text-align: center; border: 1px solid #ddd; }
-        #comparison-matrix th { background: #1a1a2e; color: white; font-size: 0.85em; white-space: pre-line; }
-        #comparison-matrix td:first-child { text-align: left; font-weight: 500; background: #f8f9fa; min-width: 200px; }
+        #comparison-matrix th, #comparison-matrix td { padding: 10px 14px; text-align: center; border: 1px solid #ddd; font-size: 14px; }
+        #comparison-matrix th { background: #1a1a2e; color: white; font-size: 0.85em; white-space: pre-line; position: sticky; top: 0; z-index: 10; }
+        #comparison-matrix td:first-child { text-align: left; font-weight: 500; background: var(--color-bg); min-width: 200px; }
+        #comparison-matrix tbody tr:nth-child(even):not(.priority-header) td:first-child { background: #f0f1f5; }
+        #comparison-matrix tbody tr:nth-child(even):not(.priority-header) { background: #fafbfd; }
+
+        /* Rank badge */
+        .rank-badge { display: inline-block; background: rgba(255,255,255,0.25); padding: 1px 7px; border-radius: 10px; font-size: 0.8em; font-weight: bold; margin-right: 2px; }
 
         /* Score cells */
-        .score-cell { color: white; font-weight: bold; font-size: 0.95em; border-radius: 4px; }
+        .score-cell { color: white; font-weight: bold; font-size: 14px; border-radius: 4px; }
 
         /* Priority headers */
         .priority-header td { background: #34495e !important; color: white; font-weight: bold; text-align: left !important; padding: 8px 14px; font-size: 0.9em; }
 
         /* Score colors */
-        .score-green { background-color: #2ecc71; }
-        .score-amber { background-color: #f39c12; }
-        .score-red { background-color: #e74c3c; }
+        .score-green { background-color: var(--color-high); }
+        .score-amber { background-color: var(--color-medium); }
+        .score-red { background-color: var(--color-low); }
         .score-none { background-color: #6c757d; }
 
         /* Progress section */
-        #progress-section { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #progress-section { margin: 20px 0; padding: 20px; background: var(--color-surface); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .progress-track { width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
         #progress-bar { width: 0%; height: 100%; background: #3498db; transition: width 0.3s ease; border-radius: 4px; }
         #progress-message { margin-top: 10px; color: #555; font-size: 0.9em; }
         #phase-label { font-weight: bold; color: #1a1a2e; margin-bottom: 8px; }
 
         /* Button */
-        #run-btn { background: #3498db; color: white; border: none; padding: 12px 24px; font-size: 1em; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+        #run-btn { background: #3498db; color: white; border: none; padding: 12px 24px; font-size: 1em; border-radius: 6px; cursor: pointer; margin-bottom: 20px; font-family: var(--font-stack); }
         #run-btn:hover { background: #2980b9; }
         #run-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
 
         /* Error section */
-        #error-section { margin: 20px 0; padding: 20px; background: #ffeaea; border: 1px solid #e74c3c; border-radius: 8px; }
+        #error-section { margin: 20px 0; padding: 20px; background: #ffeaea; border: 1px solid var(--color-low); border-radius: 8px; }
         #error-section .error-message { color: #c0392b; font-weight: 500; }
-        #retry-btn { background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+        #retry-btn { background: var(--color-low); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
 
         /* Executive Summary */
-        #executive-summary-section { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 750px; }
+        #executive-summary-section { margin: 20px 0; padding: 20px; background: var(--color-surface); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 750px; }
         #executive-summary-section h2 { color: #1a1a2e; margin-top: 0; }
-        #executive-summary p { line-height: 1.6; color: #333; margin-bottom: 12px; }
+        #executive-summary p { line-height: 1.6; color: var(--color-text); margin-bottom: 12px; }
         .no-summary { color: #888; font-style: italic; }
         #rankings-list { list-style: none; padding: 0; margin: 15px 0; }
         #rankings-list li { padding: 8px 12px; margin: 4px 0; background: #f0f0f5; border-radius: 4px; }
@@ -90,6 +107,31 @@
         .supports-no { color: #e74c3c; }
         .score-cell { cursor: pointer; }
         .score-cell:hover { filter: brightness(1.1); }
+
+        /* Job history */
+        #job-history { margin: 20px 0; }
+        .history-toggle { background: none; border: 1px solid #ddd; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: var(--font-stack); font-size: 0.9em; color: var(--color-text); }
+        .history-toggle:hover { background: var(--color-bg); }
+        #job-list { margin-top: 12px; }
+        .job-entry { display: flex; align-items: center; gap: 12px; padding: 10px 14px; margin: 4px 0; background: var(--color-surface); border-radius: 6px; border: 1px solid #eee; font-size: 0.9em; }
+        .job-entry .job-time { color: #555; min-width: 160px; }
+        .job-status { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.78em; font-weight: bold; color: white; text-transform: uppercase; }
+        .job-status.completed { background: var(--color-high); }
+        .job-status.running { background: #3498db; }
+        .job-status.failed { background: var(--color-low); }
+        .job-status.pending { background: #95a5a6; }
+        .job-view-btn { background: #3498db; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
+        .job-view-btn:hover { background: #2980b9; }
+        .job-view-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
+        .job-empty { color: #888; font-style: italic; padding: 10px 0; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .table-scroll { margin: 0 -12px; padding: 0 12px; }
+            .panel-content { width: 100%; max-width: 100vw; }
+            #executive-summary-section { max-width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -97,6 +139,12 @@
 
     <!-- Run Research button -->
     <button id="run-btn" onclick="runResearch()">Run Research</button>
+
+    <!-- Job history section (collapsible) -->
+    <div id="job-history">
+        <button class="history-toggle" onclick="toggleHistory()">Previous Runs &#9660;</button>
+        <div id="job-list" class="hidden"></div>
+    </div>
 
     <!-- Progress section (initially hidden) -->
     <div id="progress-section" class="hidden">
@@ -185,7 +233,7 @@
             const thead = document.getElementById('matrix-head');
             let headerRow = '<tr><th>Requirement</th>';
             for (const r of rankings.sort((a, b) => a.rank - b.rank)) {
-                headerRow += `<th>#${r.rank} ${escapeHtml(r.vendor)}\n(${r.overall_score.toFixed(1)})</th>`;
+                headerRow += `<th><span class="rank-badge">#${r.rank}</span> ${escapeHtml(r.vendor)}\n(${r.overall_score.toFixed(1)})</th>`;
             }
             headerRow += '</tr>';
             thead.innerHTML = headerRow;
@@ -251,7 +299,7 @@
             if (results.rankings && results.rankings.length > 0) {
                 rankingsEl.innerHTML = results.rankings
                     .sort((a, b) => a.rank - b.rank)
-                    .map(r => `<li><strong>#${r.rank} ${escapeHtml(r.vendor)}</strong> — ${r.overall_score.toFixed(1)}/10</li>`)
+                    .map(r => `<li><strong>#${r.rank} ${escapeHtml(r.vendor)}</strong> — ${r.overall_score.toFixed(1)}/100</li>`)
                     .join('');
             }
         }
@@ -426,6 +474,56 @@
         // Close panel on Escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') closePanel();
+        });
+
+        // --- Job History (Story 5.4) ---
+        let historyOpen = false;
+
+        function toggleHistory() {
+            historyOpen = !historyOpen;
+            const listEl = document.getElementById('job-list');
+            const btn = document.querySelector('.history-toggle');
+            if (historyOpen) {
+                listEl.classList.remove('hidden');
+                btn.innerHTML = 'Previous Runs &#9650;';
+                loadJobHistory();
+            } else {
+                listEl.classList.add('hidden');
+                btn.innerHTML = 'Previous Runs &#9660;';
+            }
+        }
+
+        async function loadJobHistory() {
+            const listEl = document.getElementById('job-list');
+            try {
+                const response = await fetch('/api/jobs');
+                if (!response.ok) { listEl.innerHTML = '<div class="job-empty">Failed to load job history.</div>'; return; }
+                const jobs = await response.json();
+                if (!jobs || jobs.length === 0) {
+                    listEl.innerHTML = '<div class="job-empty">No previous research runs. Click "Run Research" to start.</div>';
+                    return;
+                }
+                listEl.innerHTML = jobs.map(j => {
+                    const time = new Date(j.created_at).toLocaleString();
+                    const statusClass = j.status || 'pending';
+                    const canView = j.status === 'completed';
+                    const viewBtn = canView
+                        ? `<button class="job-view-btn" onclick="loadResults('${escapeHtml(j.id)}')">View Results</button>`
+                        : (j.status === 'running' ? `<button class="job-view-btn" disabled>Running...</button>` : '');
+                    return `<div class="job-entry">
+                        <span class="job-time">${escapeHtml(time)}</span>
+                        <span class="job-status ${escapeHtml(statusClass)}">${escapeHtml(j.status)}</span>
+                        ${viewBtn}
+                    </div>`;
+                }).join('');
+            } catch (err) {
+                listEl.innerHTML = '<div class="job-empty">Failed to load job history.</div>';
+            }
+        }
+
+        // Load job history on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadJobHistory();
         });
     </script>
 </body>
