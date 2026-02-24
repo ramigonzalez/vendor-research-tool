@@ -8,6 +8,7 @@ interface and its SQLite implementation.
 from __future__ import annotations
 
 import json
+import logging
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +28,8 @@ from app.models import (
     SourceType,
     VendorRanking,
 )
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent / "research.db"
 
@@ -99,6 +102,8 @@ async def create_db_and_tables(db_path: Path | str | None = None) -> None:
         await db.execute(_SCORES_JOB_ID_INDEX)
         await db.commit()
 
+    logger.info("Database initialized at %s", path)
+
 
 # ---------------------------------------------------------------------------
 # Abstract Repository
@@ -154,6 +159,7 @@ class SQLiteResearchRepository(ResearchRepository):
 
     async def create_job(self, job: ResearchJob) -> None:
         """Insert a new research job record."""
+        logger.debug("Creating job job_id=%s", job.id)
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(
                 "INSERT INTO jobs (id, status, created_at, completed_at, progress_pct, progress_message) "
@@ -171,6 +177,7 @@ class SQLiteResearchRepository(ResearchRepository):
 
     async def update_job_status(self, job_id: str, status: JobStatus, progress_pct: int, progress_message: str) -> None:
         """Update the status, progress percentage, and message for a job."""
+        logger.debug("Updating job status job_id=%s status=%s", job_id, status.value)
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(
                 "UPDATE jobs SET status = ?, progress_pct = ?, progress_message = ? WHERE id = ?",
@@ -180,6 +187,7 @@ class SQLiteResearchRepository(ResearchRepository):
 
     async def save_evidence(self, job_id: str, vendor: str, req_id: str, evidence: list[Evidence]) -> None:
         """Bulk-insert evidence records for a vendor-requirement pair."""
+        logger.debug("Saving evidence vendor=%s req_id=%s count=%d", vendor, req_id, len(evidence))
         async with aiosqlite.connect(self._db_path) as db:
             for ev in evidence:
                 await db.execute(
@@ -203,6 +211,7 @@ class SQLiteResearchRepository(ResearchRepository):
 
     async def save_score(self, job_id: str, vendor: str, req_id: str, score_result: ScoreResult) -> None:
         """Insert or replace a score record for a vendor-requirement pair."""
+        logger.debug("Saving score vendor=%s req_id=%s", vendor, req_id)
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(
                 "INSERT OR REPLACE INTO scores (job_id, vendor, requirement_id, score, confidence, "
@@ -224,6 +233,7 @@ class SQLiteResearchRepository(ResearchRepository):
 
     async def save_final_results(self, job_id: str, summary: str, rankings: list[VendorRanking]) -> None:
         """Mark a job as completed and store summary and rankings."""
+        logger.info("Saving final results job_id=%s", job_id)
         rankings_data = [{"vendor": r.vendor, "overall_score": r.overall_score, "rank": r.rank} for r in rankings]
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(

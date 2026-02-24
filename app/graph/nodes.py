@@ -75,6 +75,8 @@ async def generate_queries(state: ResearchState) -> dict:
     vendors: list[str] = state.get("vendors", [])
     requirements: list[Requirement] = state.get("requirements", [])
 
+    logger.info("Generating queries for %d vendors x %d requirements", len(vendors), len(requirements))
+
     llm = get_llm()
     parser = JsonOutputParser()
 
@@ -86,6 +88,7 @@ async def generate_queries(state: ResearchState) -> dict:
     for key, query_list in results:
         queries[key] = query_list
 
+    logger.info("Generated %d query pairs", len(queries))
     return {"queries": queries}
 
 
@@ -249,11 +252,14 @@ async def extract_evidence(state: ResearchState) -> dict:
     results = await asyncio.gather(*tasks)
 
     evidence: dict[str, dict[str, list[Evidence]]] = {}
+    total_items = 0
     for vendor, req_id, ev_list in results:
         if vendor not in evidence:
             evidence[vendor] = {}
         evidence[vendor][req_id] = ev_list
+        total_items += len(ev_list)
 
+    logger.info("Extracted %d evidence items", total_items)
     await emit_progress(state, "research", 50, "Evidence extraction complete")
     return {"evidence": evidence}
 
@@ -462,6 +468,7 @@ async def assess_capabilities(state: ResearchState) -> dict:
             assessments[vendor] = {}
         assessments[vendor][req_id] = assessment
 
+    logger.info("Capability assessments complete")
     await emit_progress(state, "scoring", 65, "Capability assessments complete")
     return {"assessments": assessments}
 
@@ -502,6 +509,7 @@ async def compute_scores(state: ResearchState) -> dict:
                 evidence=ev,
             )
 
+    logger.info("Scores computed for %d vendors", len(scores))
     await emit_progress(state, "scoring", 80, "Score computation complete")
     return {"scores": scores}
 
@@ -518,6 +526,8 @@ async def compute_rankings(state: ResearchState) -> dict:
     scores = state.get("scores", {})
     requirements = state.get("requirements", [])
     rankings = compute_vendor_rankings(scores, requirements)
+    ranking_summary = ", ".join(f"#{r.rank} {r.vendor} ({r.overall_score:.1f})" for r in rankings)
+    logger.info("Rankings: %s", ranking_summary)
     await emit_progress(state, "scoring", 85, "Rankings computed")
     return {"rankings": rankings}
 
@@ -567,5 +577,6 @@ async def generate_summary(state: ResearchState) -> dict:
         logger.warning("Summary generation failed, using fallback", exc_info=True)
         summary = "Executive summary not available — see matrix for detailed scores."
 
+    logger.info("Summary generated")
     await emit_progress(state, "synthesis", 95, "Summary generated")
     return {"summary": summary}

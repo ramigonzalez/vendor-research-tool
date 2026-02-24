@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from dateutil import parser as date_parser
 
 from app.models import Evidence, SourceType
+
+logger = logging.getLogger(__name__)
 
 AUTHORITY_WEIGHTS: dict[SourceType, float] = {
     SourceType.official_docs: 1.0,
@@ -92,6 +95,11 @@ def compute_confidence(evidence: list[Evidence]) -> float:
         + _WEIGHT_CONSISTENCY * consistency
     )
 
+    logger.debug(
+        "Confidence components: count=%.2f authority=%.2f recency=%.2f consistency=%.2f raw=%.2f",
+        source_count, authority, recency, consistency, raw,
+    )
+
     return max(0.0, min(1.0, raw))
 
 
@@ -158,6 +166,8 @@ def compute_vendor_rankings(
         rankings.append({"vendor": vendor, "weighted_score": round(normalized, 2)})
 
     sorted_rankings = sorted(rankings, key=lambda x: (-x["weighted_score"], x["vendor"]))
+    for r in sorted_rankings:
+        logger.debug("Vendor ranking: %s weighted_score=%.2f", r["vendor"], r["weighted_score"])
     return [
         VendorRanking(vendor=r["vendor"], overall_score=r["weighted_score"], rank=i + 1)
         for i, r in enumerate(sorted_rankings)

@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.router import router
 from app.config import settings
+from app.logging_config import setup_logging
 from app.repository import create_db_and_tables
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize database on startup."""
+    setup_logging()
     await create_db_and_tables()
     logger.info("LLM: %s / %s", settings.LLM_PROVIDER, settings.LLM_MODEL)
     yield

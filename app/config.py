@@ -11,6 +11,10 @@ from app.models import Priority, Requirement
 class Settings(BaseSettings):
     """API keys and environment configuration."""
 
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "text"  # "text" or "json"
+
     # LLM provider selection
     LLM_PROVIDER: str = "openrouter"
     LLM_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
