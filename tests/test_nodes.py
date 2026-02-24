@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.graph.nodes import _build_fallback_queries, generate_queries
+from app.graph.nodes import _build_fallback_queries, execute_searches, generate_queries
 from app.graph.state import ResearchState
 from app.models import Priority, Requirement
 
@@ -226,3 +226,396 @@ class TestGenerateQueries:
             assert isinstance(query_list, list)
             for q in query_list:
                 assert isinstance(q, str)
+
+
+# ---------------------------------------------------------------------------
+# Story 1.2 - execute_searches tests
+# ---------------------------------------------------------------------------
+
+
+def _make_search_state(
+    queries: dict[str, list[str]] | None = None,
+) -> ResearchState:
+    """Create a minimal ResearchState with queries for search tests."""
+    state: ResearchState = {
+        "vendors": VENDORS,
+        "requirements": REQUIREMENTS,
+        "queries": queries if queries is not None else {},
+    }
+    return state
+
+
+class TestExecuteSearches:
+    @pytest.mark.asyncio
+    async def test_all_searches_scheduled(self) -> None:
+        """Each query in every pair produces one search call."""
+        queries = {
+            "LangSmith:R1": ["query a", "query b"],
+            "Langfuse:R2": ["query c", "query d"],
+        }
+        state = _make_search_state(queries)
+
+        mock_client = AsyncMock()
+        mock_client.search = AsyncMock(return_value={"results": [{"title": "r"}]})
+
+        with patch("app.graph.nodes.AsyncTavilyClient", return_value=mock_client), patch("app.graph.nodes.settings"):
+            result = await execute_searches(state)
+
+        assert mock_client.search.call_count == 4
+        assert len(result["raw_results"]) == 4
+
+    @pytest.mark.asyncio
+    async def test_raw_results_keyed_correctly(self) -> None:
+        """Keys follow the vendor:req_id:query_idx pattern."""
+        queries = {
+            "LangSmith:R1": ["query a", "query b"],
+        }
+        state = _make_search_state(queries)
+
+        mock_client = AsyncMock()
+        mock_client.search = AsyncMock(return_value={"results": [{"url": "http://example.com"}]})
+
+        with patch("app.graph.nodes.AsyncTavilyClient", return_value=mock_client), patch("app.graph.nodes.settings"):
+            result = await execute_searches(state)
+
+        raw = result["raw_results"]
+        assert "LangSmith:R1:0" in raw
+        assert "LangSmith:R1:1" in raw
+
+    @pytest.mark.asyncio
+    async def test_individual_failure_does_not_abort(self) -> None:
+        """A single search failure returns [] for that key; others succeed."""
+        queries = {
+            "LangSmith:R1": ["good query"],
+            "Langfuse:R2": ["bad query"],
+        }
+        state = _make_search_state(queries)
+
+        mock_client = AsyncMock()
+
+        async def _side_effect(**kwargs: object) -> dict:
+            query = kwargs.get("query", "")
+            if query == "bad query":
+                raise RuntimeError("Tavily error")
+            return {"results": [{"title": "ok"}]}
+
+        mock_client.search = AsyncMock(side_effect=_side_effect)
+
+        with patch("app.graph.nodes.AsyncTavilyClient", return_value=mock_client), patch("app.graph.nodes.settings"):
+            result = await execute_searches(state)
+
+        raw = result["raw_results"]
+        assert raw["LangSmith:R1:0"] == [{"title": "ok"}]
+        assert raw["Langfuse:R2:0"] == []
+
+    @pytest.mark.asyncio
+    async def test_empty_queries_returns_empty(self) -> None:
+        """No queries produces empty raw_results."""
+        state = _make_search_state(queries={})
+
+        with patch("app.graph.nodes.AsyncTavilyClient", return_value=AsyncMock()), patch("app.graph.nodes.settings"):
+            result = await execute_searches(state)
+
+        assert result == {"raw_results": {}}
+
+    @pytest.mark.asyncio
+    async def test_semaphore_limits_concurrency(self) -> None:
+        """Verify the semaphore caps concurrent searches at 5."""
+        import asyncio
+
+        queries = {f"V{i}:R1": ["q"] for i in range(10)}
+        state = _make_search_state(queries)
+
+        peak_concurrent = 0
+        current_concurrent = 0
+        lock = asyncio.Lock()
+
+        async def _tracking_search(**kwargs: object) -> dict:
+            nonlocal peak_concurrent, current_concurrent
+            async with lock:
+                current_concurrent += 1
+                if current_concurrent > peak_concurrent:
+                    peak_concurrent = current_concurrent
+            await asyncio.sleep(0.01)
+            async with lock:
+                current_concurrent -= 1
+            return {"results": []}
+
+        mock_client = AsyncMock()
+        mock_client.search = AsyncMock(side_effect=_tracking_search)
+
+        with patch("app.graph.nodes.AsyncTavilyClient", return_value=mock_client), patch("app.graph.nodes.settings"):
+            await execute_searches(state)
+
+        assert peak_concurrent <= 5
+
+    @pytest.mark.asyncio
+    async def test_returns_partial_state_dict(self) -> None:
+        """Node must return dict with only 'raw_results' key (LangGraph pattern)."""
+        state = _make_search_state(queries={"V:R1": ["q"]})
+
+        mock_client = AsyncMock()
+        mock_client.search = AsyncMock(return_value={"results": []})
+
+        with patch("app.graph.nodes.AsyncTavilyClient", return_value=mock_client), patch("app.graph.nodes.settings"):
+            result = await execute_searches(state)
+
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["raw_results"]
+
+
+# ---------------------------------------------------------------------------
+# Story 1.3 - extract_evidence tests
+# ---------------------------------------------------------------------------
+
+from app.graph.nodes import _extract_evidence_for_pair, extract_evidence  # noqa: E402
+from app.models import Evidence, SourceType  # noqa: E402
+
+
+def _make_evidence_state(
+    raw_results: dict[str, list[dict]] | None = None,
+    vendors: list[str] | None = None,
+    requirements: list[Requirement] | None = None,
+) -> ResearchState:
+    """Create a minimal ResearchState for evidence extraction tests."""
+    state: ResearchState = {
+        "vendors": vendors if vendors is not None else ["LangSmith"],
+        "requirements": requirements
+        if requirements is not None
+        else [Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high)],
+        "raw_results": raw_results if raw_results is not None else {},
+    }
+    return state
+
+
+_MOCK_LLM_EVIDENCE_RESPONSE = {
+    "evidence": [
+        {
+            "claim": "LangSmith supports framework-agnostic tracing via OpenTelemetry",
+            "source_url": "https://docs.langsmith.com/tracing",
+            "source_name": "LangSmith Docs",
+            "source_type": "official_docs",
+            "content_date": "2025-01",
+            "relevance": 0.9,
+            "supports_requirement": True,
+        },
+        {
+            "claim": "LangSmith tracing works with any Python framework",
+            "source_url": "https://github.com/langchain-ai/langsmith-sdk",
+            "source_name": "LangSmith SDK",
+            "source_type": "github",
+            "content_date": "2025-02",
+            "relevance": 0.8,
+            "supports_requirement": True,
+        },
+    ]
+}
+
+
+class TestExtractEvidence:
+    @pytest.mark.asyncio
+    async def test_correct_evidence_objects_extracted(self) -> None:
+        """LLM response is parsed into correct Evidence objects."""
+        raw_results = {
+            "LangSmith:R1:0": [
+                {"url": "https://docs.langsmith.com/tracing", "title": "Tracing", "content": "tracing info"},
+            ],
+            "LangSmith:R1:1": [
+                {"url": "https://github.com/langchain-ai/langsmith-sdk", "title": "SDK", "content": "sdk info"},
+            ],
+        }
+        state = _make_evidence_state(raw_results=raw_results)
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("{}"))
+
+        mock_parser = AsyncMock()
+        mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_EVIDENCE_RESPONSE)
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await extract_evidence(state)
+
+        evidence = result["evidence"]
+        assert "LangSmith" in evidence
+        assert "R1" in evidence["LangSmith"]
+        ev_list = evidence["LangSmith"]["R1"]
+        assert len(ev_list) == 2
+        assert isinstance(ev_list[0], Evidence)
+        assert ev_list[0].claim == "LangSmith supports framework-agnostic tracing via OpenTelemetry"
+        assert ev_list[0].source_type == SourceType.official_docs
+        assert ev_list[0].relevance == 0.9
+        assert ev_list[0].supports_requirement is True
+        assert ev_list[1].source_type == SourceType.github
+
+    @pytest.mark.asyncio
+    async def test_empty_search_results_produce_empty_evidence(self) -> None:
+        """When no raw_results exist for a pair, evidence list is empty (no error)."""
+        state = _make_evidence_state(raw_results={})
+
+        mock_llm = AsyncMock()
+        mock_parser = AsyncMock()
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await extract_evidence(state)
+
+        evidence = result["evidence"]
+        assert evidence["LangSmith"]["R1"] == []
+        # LLM should NOT have been called since there were no results
+        mock_llm.ainvoke.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_invalid_llm_response_returns_empty(self) -> None:
+        """When LLM raises an exception, evidence list is empty (graceful failure)."""
+        raw_results = {
+            "LangSmith:R1:0": [{"url": "https://example.com", "title": "Test", "content": "content"}],
+        }
+        state = _make_evidence_state(raw_results=raw_results)
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM failure"))
+
+        mock_parser = AsyncMock()
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await extract_evidence(state)
+
+        evidence = result["evidence"]
+        assert evidence["LangSmith"]["R1"] == []
+
+    @pytest.mark.asyncio
+    async def test_source_type_classified_correctly(self) -> None:
+        """Valid SourceType enum values are correctly mapped."""
+        raw_results = {
+            "LangSmith:R1:0": [{"url": "https://example.com", "title": "T", "content": "c"}],
+        }
+        state = _make_evidence_state(raw_results=raw_results)
+
+        all_types_response = {
+            "evidence": [
+                {
+                    "claim": "claim1",
+                    "source_url": "u1",
+                    "source_name": "n1",
+                    "source_type": "official_docs",
+                    "relevance": 0.9,
+                    "supports_requirement": True,
+                },
+                {
+                    "claim": "claim2",
+                    "source_url": "u2",
+                    "source_name": "n2",
+                    "source_type": "github",
+                    "relevance": 0.8,
+                    "supports_requirement": True,
+                },
+                {
+                    "claim": "claim3",
+                    "source_url": "u3",
+                    "source_name": "n3",
+                    "source_type": "comparison",
+                    "relevance": 0.7,
+                    "supports_requirement": False,
+                },
+                {
+                    "claim": "claim4",
+                    "source_url": "u4",
+                    "source_name": "n4",
+                    "source_type": "blog",
+                    "relevance": 0.6,
+                    "supports_requirement": False,
+                },
+                {
+                    "claim": "claim5",
+                    "source_url": "u5",
+                    "source_name": "n5",
+                    "source_type": "community",
+                    "relevance": 0.5,
+                    "supports_requirement": False,
+                },
+                {
+                    "claim": "claim6",
+                    "source_url": "u6",
+                    "source_name": "n6",
+                    "source_type": "invalid_type",
+                    "relevance": 0.4,
+                    "supports_requirement": False,
+                },
+            ]
+        }
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("{}"))
+
+        mock_parser = AsyncMock()
+        mock_parser.ainvoke = AsyncMock(return_value=all_types_response)
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await extract_evidence(state)
+
+        ev_list = result["evidence"]["LangSmith"]["R1"]
+        assert ev_list[0].source_type == SourceType.official_docs
+        assert ev_list[1].source_type == SourceType.github
+        assert ev_list[2].source_type == SourceType.comparison
+        assert ev_list[3].source_type == SourceType.blog
+        assert ev_list[4].source_type == SourceType.community
+        # Invalid type falls back to community
+        assert ev_list[5].source_type == SourceType.community
+
+    @pytest.mark.asyncio
+    async def test_returns_partial_state_dict(self) -> None:
+        """Node must return dict with only 'evidence' key (LangGraph pattern)."""
+        state = _make_evidence_state(raw_results={})
+
+        mock_llm = AsyncMock()
+        mock_parser = AsyncMock()
+
+        with (
+            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
+        ):
+            result = await extract_evidence(state)
+
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["evidence"]
+
+    @pytest.mark.asyncio
+    async def test_content_truncated_to_2000_chars(self) -> None:
+        """Content in formatted results is truncated to 2000 characters."""
+        long_content = "x" * 5000
+        raw_results = {
+            "LangSmith:R1:0": [
+                {"url": "https://example.com", "title": "T", "content": long_content},
+            ],
+        }
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("{}"))
+
+        mock_parser = AsyncMock()
+        mock_parser.ainvoke = AsyncMock(return_value={"evidence": []})
+
+        req = Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high)
+        parser_instance = mock_parser
+
+        _vendor, _req_id, _ev_list = await _extract_evidence_for_pair(
+            mock_llm, parser_instance, "LangSmith", req, raw_results
+        )
+
+        # Verify the LLM was called and the content in the message is truncated
+        call_args = mock_llm.ainvoke.call_args[0][0]
+        user_msg_content = call_args[1].content
+        # The formatted content should contain truncated text (2000 x's, not 5000)
+        assert "x" * 2000 in user_msg_content
+        assert "x" * 2001 not in user_msg_content
