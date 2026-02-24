@@ -5,12 +5,248 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SignalCore Vendor Research Tool</title>
     <style>
-        body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        /* Base */
+        body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f6fa; }
         h1 { color: #1a1a2e; }
+        .hidden { display: none; }
+
+        /* Matrix table */
+        .table-scroll { overflow-x: auto; }
+        #comparison-matrix { border-collapse: collapse; width: 100%; min-width: 600px; }
+        #comparison-matrix th, #comparison-matrix td { padding: 10px 14px; text-align: center; border: 1px solid #ddd; }
+        #comparison-matrix th { background: #1a1a2e; color: white; font-size: 0.85em; white-space: pre-line; }
+        #comparison-matrix td:first-child { text-align: left; font-weight: 500; background: #f8f9fa; min-width: 200px; }
+
+        /* Score cells */
+        .score-cell { color: white; font-weight: bold; font-size: 0.95em; border-radius: 4px; }
+
+        /* Priority headers */
+        .priority-header td { background: #34495e !important; color: white; font-weight: bold; text-align: left !important; padding: 8px 14px; font-size: 0.9em; }
+
+        /* Score colors */
+        .score-green { background-color: #2ecc71; }
+        .score-amber { background-color: #f39c12; }
+        .score-red { background-color: #e74c3c; }
+        .score-none { background-color: #6c757d; }
+
+        /* Progress section */
+        #progress-section { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .progress-track { width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+        #progress-bar { width: 0%; height: 100%; background: #3498db; transition: width 0.3s ease; border-radius: 4px; }
+        #progress-message { margin-top: 10px; color: #555; font-size: 0.9em; }
+        #phase-label { font-weight: bold; color: #1a1a2e; margin-bottom: 8px; }
+
+        /* Button */
+        #run-btn { background: #3498db; color: white; border: none; padding: 12px 24px; font-size: 1em; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+        #run-btn:hover { background: #2980b9; }
+        #run-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
+
+        /* Error section */
+        #error-section { margin: 20px 0; padding: 20px; background: #ffeaea; border: 1px solid #e74c3c; border-radius: 8px; }
+        #error-section .error-message { color: #c0392b; font-weight: 500; }
+        #retry-btn { background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
     </style>
 </head>
 <body>
     <h1>SignalCore Vendor Research Tool</h1>
-    <p>Research pipeline ready. Frontend coming soon.</p>
+
+    <!-- Run Research button -->
+    <button id="run-btn" onclick="runResearch()">Run Research</button>
+
+    <!-- Progress section (initially hidden) -->
+    <div id="progress-section" class="hidden">
+        <div id="phase-label">Starting...</div>
+        <div class="progress-track">
+            <div id="progress-bar"></div>
+        </div>
+        <div id="progress-message">Initializing research pipeline...</div>
+    </div>
+
+    <!-- Error section (initially hidden) -->
+    <div id="error-section" class="hidden">
+        <div class="error-message" id="error-message"></div>
+        <button id="retry-btn" onclick="runResearch()">Retry</button>
+    </div>
+
+    <!-- Results section (initially hidden) -->
+    <div id="results-section" class="hidden">
+        <div id="matrix-container">
+            <h2>Comparison Matrix</h2>
+            <div class="table-scroll">
+                <table id="comparison-matrix">
+                    <thead id="matrix-head"></thead>
+                    <tbody id="matrix-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- No results message -->
+    <div id="no-results">
+        <p>No research results to display. Click "Run Research" to start.</p>
+    </div>
+
+    <script>
+        function getScoreColor(score) {
+            if (score === null || score === undefined) return 'score-none';
+            if (score >= 7) return 'score-green';
+            if (score >= 4) return 'score-amber';
+            return 'score-red';
+        }
+
+        function renderMatrix(results) {
+            const { matrix, rankings, requirements } = results;
+            if (!matrix || !rankings || !requirements) return;
+
+            // Sort vendors by rank
+            const vendors = rankings.sort((a, b) => a.rank - b.rank).map(r => r.vendor);
+
+            // Build header
+            const thead = document.getElementById('matrix-head');
+            let headerRow = '<tr><th>Requirement</th>';
+            for (const r of rankings.sort((a, b) => a.rank - b.rank)) {
+                headerRow += `<th>#${r.rank} ${r.vendor}\n(${r.overall_score.toFixed(1)})</th>`;
+            }
+            headerRow += '</tr>';
+            thead.innerHTML = headerRow;
+
+            // Group requirements by priority
+            const priorityOrder = ['high', 'medium', 'low'];
+            const priorityLabels = { high: 'High Priority', medium: 'Medium Priority', low: 'Low Priority' };
+            const grouped = {};
+            for (const req of requirements) {
+                if (!grouped[req.priority]) grouped[req.priority] = [];
+                grouped[req.priority].push(req);
+            }
+
+            // Build body
+            const tbody = document.getElementById('matrix-body');
+            let bodyHtml = '';
+
+            for (const priority of priorityOrder) {
+                const reqs = grouped[priority] || [];
+                if (reqs.length === 0) continue;
+
+                // Priority header row
+                bodyHtml += `<tr class="priority-header"><td colspan="${vendors.length + 1}">${priorityLabels[priority]}</td></tr>`;
+
+                for (const req of reqs) {
+                    bodyHtml += `<tr><td>${req.description}</td>`;
+                    for (const vendor of vendors) {
+                        const scoreResult = matrix[vendor] && matrix[vendor][req.id];
+                        if (scoreResult) {
+                            const score = scoreResult.score;
+                            const colorClass = getScoreColor(score);
+                            bodyHtml += `<td class="score-cell ${colorClass}">${score.toFixed(1)}</td>`;
+                        } else {
+                            bodyHtml += `<td class="score-cell score-none">&mdash;</td>`;
+                        }
+                    }
+                    bodyHtml += '</tr>';
+                }
+            }
+
+            tbody.innerHTML = bodyHtml;
+
+            document.getElementById('results-section').classList.remove('hidden');
+            document.getElementById('no-results').classList.add('hidden');
+        }
+
+        // Helper to render results (called by other stories)
+        function renderResults(results) {
+            renderMatrix(results);
+        }
+
+        // Load results from the API for testing
+        async function loadResults(jobId) {
+            const response = await fetch(`/api/research/${jobId}`);
+            if (response.ok) {
+                const results = await response.json();
+                if (results.matrix) {
+                    renderResults(results);
+                }
+            }
+        }
+
+        async function runResearch() {
+            // Reset UI
+            document.getElementById('run-btn').disabled = true;
+            document.getElementById('progress-section').classList.remove('hidden');
+            document.getElementById('error-section').classList.add('hidden');
+            document.getElementById('results-section').classList.add('hidden');
+            document.getElementById('no-results').classList.add('hidden');
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('phase-label').textContent = 'Starting...';
+            document.getElementById('progress-message').textContent = 'Initializing research pipeline...';
+
+            try {
+                const response = await fetch('/api/research', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop(); // Keep incomplete chunk
+
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('data: ')) {
+                            try {
+                                const event = JSON.parse(trimmed.slice(6));
+                                handleSSEEvent(event);
+                            } catch (e) {
+                                console.warn('Failed to parse SSE event:', trimmed);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                showError('Connection failed: ' + err.message);
+            } finally {
+                document.getElementById('run-btn').disabled = false;
+            }
+        }
+
+        const phaseLabels = {
+            research: 'Research',
+            scoring: 'Scoring',
+            synthesis: 'Synthesis'
+        };
+
+        function handleSSEEvent(event) {
+            if (event.type === 'started') {
+                document.getElementById('phase-label').textContent = 'Research started';
+                document.getElementById('progress-message').textContent = 'Job ID: ' + event.job_id;
+            } else if (event.type === 'progress') {
+                document.getElementById('progress-bar').style.width = event.pct + '%';
+                document.getElementById('phase-label').textContent = phaseLabels[event.phase] || event.phase;
+                document.getElementById('progress-message').textContent = event.message;
+            } else if (event.type === 'completed') {
+                document.getElementById('progress-section').classList.add('hidden');
+                if (event.results) {
+                    renderResults(event.results);
+                }
+            } else if (event.type === 'error') {
+                showError(event.message);
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('progress-section').classList.add('hidden');
+            document.getElementById('error-section').classList.remove('hidden');
+            document.getElementById('error-message').textContent = 'Error: ' + message;
+            document.getElementById('run-btn').disabled = false;
+        }
+    </script>
 </body>
 </html>
