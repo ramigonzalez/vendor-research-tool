@@ -128,3 +128,37 @@ def compute_requirement_score(assessment: LLMAssessment, evidence: list[Evidence
 
     score = 0.40 * capability_score + 0.30 * evidence_score + 0.20 * maturity_score + 0.10 * limitations_score
     return max(0.0, min(10.0, score))
+
+
+# ---------------------------------------------------------------------------
+# Story 2.5 - Weighted Vendor Ranking
+# ---------------------------------------------------------------------------
+
+from app.config import PRIORITY_WEIGHTS  # noqa: E402, I001
+from app.models import Requirement, ScoreResult as _ScoreResult, VendorRanking  # noqa: E402
+
+
+def compute_vendor_rankings(
+    scores: dict[str, dict[str, _ScoreResult]],
+    requirements: list[Requirement],
+) -> list[VendorRanking]:
+    """Compute priority-weighted vendor rankings normalized to 0-100."""
+    max_possible = sum(10.0 * PRIORITY_WEIGHTS[req.priority.value] * 1.0 for req in requirements)
+
+    rankings = []
+    for vendor, req_scores in scores.items():
+        weighted_sum = 0.0
+        for req in requirements:
+            if req.id in req_scores:
+                result = req_scores[req.id]
+                weight = PRIORITY_WEIGHTS[req.priority.value]
+                weighted_sum += result.score * weight * result.confidence
+
+        normalized = (weighted_sum / max_possible) * 100 if max_possible > 0 else 0.0
+        rankings.append({"vendor": vendor, "weighted_score": round(normalized, 2)})
+
+    sorted_rankings = sorted(rankings, key=lambda x: (-x["weighted_score"], x["vendor"]))
+    return [
+        VendorRanking(vendor=r["vendor"], overall_score=r["weighted_score"], rank=i + 1)
+        for i, r in enumerate(sorted_rankings)
+    ]

@@ -290,3 +290,126 @@ class TestCapabilityAndMaturityScores:
     def test_maturity_scores_complete(self) -> None:
         for level in MaturityLevel:
             assert level in MATURITY_SCORES, f"Missing score for {level}"
+
+
+# ---------------------------------------------------------------------------
+# Story 2.5 - Weighted Vendor Ranking Tests
+# ---------------------------------------------------------------------------
+
+from app.models import Priority, Requirement, ScoreResult  # noqa: E402
+from app.scoring.engine import compute_vendor_rankings  # noqa: E402
+
+
+def _make_score_result(
+    score: float = 10.0,
+    confidence: float = 1.0,
+    capability: CapabilityLevel = CapabilityLevel.full,
+    maturity: MaturityLevel = MaturityLevel.ga,
+) -> ScoreResult:
+    """Helper to create a ScoreResult with sensible defaults."""
+    return ScoreResult(
+        score=score,
+        confidence=confidence,
+        capability_level=capability,
+        maturity=maturity,
+        justification="Test justification",
+        limitations=[],
+        evidence=[_make_evidence(supports=True) for _ in range(5)],
+    )
+
+
+def _make_requirements() -> list[Requirement]:
+    """Create a standard set of requirements for ranking tests."""
+    return [
+        Requirement(id="R1", description="Tracing", priority=Priority.high),
+        Requirement(id="R2", description="Self-hosting", priority=Priority.medium),
+        Requirement(id="R3", description="Custom metrics", priority=Priority.low),
+    ]
+
+
+class TestComputeVendorRankings:
+    """Tests for compute_vendor_rankings."""
+
+    def test_full_scores_rank_first(self) -> None:
+        """Vendor with all full+ga+5supporting ranks first."""
+        reqs = _make_requirements()
+        scores: dict[str, dict[str, ScoreResult]] = {
+            "VendorA": {
+                "R1": _make_score_result(score=10.0, confidence=1.0),
+                "R2": _make_score_result(score=10.0, confidence=1.0),
+                "R3": _make_score_result(score=10.0, confidence=1.0),
+            },
+            "VendorB": {
+                "R1": _make_score_result(score=5.0, confidence=0.8),
+                "R2": _make_score_result(score=5.0, confidence=0.8),
+                "R3": _make_score_result(score=5.0, confidence=0.8),
+            },
+        }
+        rankings = compute_vendor_rankings(scores, reqs)
+        assert rankings[0].vendor == "VendorA"
+        assert rankings[0].rank == 1
+        assert rankings[0].overall_score == 100.0
+        assert rankings[1].vendor == "VendorB"
+        assert rankings[1].rank == 2
+
+    def test_tiebreaker_alphabetical(self) -> None:
+        """When scores are tied, vendors are sorted alphabetically."""
+        reqs = _make_requirements()
+        scores: dict[str, dict[str, ScoreResult]] = {
+            "Zebra": {
+                "R1": _make_score_result(score=7.0, confidence=1.0),
+                "R2": _make_score_result(score=7.0, confidence=1.0),
+                "R3": _make_score_result(score=7.0, confidence=1.0),
+            },
+            "Alpha": {
+                "R1": _make_score_result(score=7.0, confidence=1.0),
+                "R2": _make_score_result(score=7.0, confidence=1.0),
+                "R3": _make_score_result(score=7.0, confidence=1.0),
+            },
+        }
+        rankings = compute_vendor_rankings(scores, reqs)
+        assert rankings[0].vendor == "Alpha"
+        assert rankings[0].rank == 1
+        assert rankings[1].vendor == "Zebra"
+        assert rankings[1].rank == 2
+        assert rankings[0].overall_score == rankings[1].overall_score
+
+    def test_four_vendors_with_zeros(self) -> None:
+        """4 vendors always returned even with zero scores."""
+        reqs = _make_requirements()
+        scores: dict[str, dict[str, ScoreResult]] = {
+            "V1": {"R1": _make_score_result(score=0.0, confidence=0.0)},
+            "V2": {"R1": _make_score_result(score=0.0, confidence=0.0)},
+            "V3": {"R1": _make_score_result(score=0.0, confidence=0.0)},
+            "V4": {"R1": _make_score_result(score=0.0, confidence=0.0)},
+        }
+        rankings = compute_vendor_rankings(scores, reqs)
+        assert len(rankings) == 4
+        for r in rankings:
+            assert r.overall_score == 0.0
+
+    def test_formula_manual_calculation(self) -> None:
+        """Formula matches manual calculation."""
+        reqs = [
+            Requirement(id="R1", description="Tracing", priority=Priority.high),
+            Requirement(id="R2", description="Hosting", priority=Priority.low),
+        ]
+        # max_possible = 10*3*1 + 10*1*1 = 30 + 10 = 40
+        scores: dict[str, dict[str, ScoreResult]] = {
+            "TestVendor": {
+                "R1": _make_score_result(score=8.0, confidence=0.9),
+                "R2": _make_score_result(score=6.0, confidence=0.5),
+            },
+        }
+        rankings = compute_vendor_rankings(scores, reqs)
+        # weighted_sum = 8.0*3.0*0.9 + 6.0*1.0*0.5 = 21.6 + 3.0 = 24.6
+        # normalized = (24.6 / 40) * 100 = 61.5
+        assert len(rankings) == 1
+        assert rankings[0].overall_score == 61.5
+        assert rankings[0].rank == 1
+
+    def test_empty_scores_returns_empty(self) -> None:
+        """Empty scores dict returns empty rankings list."""
+        reqs = _make_requirements()
+        rankings = compute_vendor_rankings({}, reqs)
+        assert rankings == []

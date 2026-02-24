@@ -503,3 +503,19 @@ async def compute_scores(state: ResearchState) -> dict:
 
     await emit_progress(state, "scoring", 80, "Score computation complete")
     return {"scores": scores}
+
+
+# ---------------------------------------------------------------------------
+# Story 2.5 - Weighted Vendor Ranking
+# ---------------------------------------------------------------------------
+
+from app.scoring.engine import compute_vendor_rankings  # noqa: E402
+
+
+async def compute_rankings(state: ResearchState) -> dict:
+    """LangGraph node: compute weighted vendor rankings."""
+    scores = state.get("scores", {})
+    requirements = state.get("requirements", [])
+    rankings = compute_vendor_rankings(scores, requirements)
+    await emit_progress(state, "scoring", 85, "Rankings computed")
+    return {"rankings": rankings}
