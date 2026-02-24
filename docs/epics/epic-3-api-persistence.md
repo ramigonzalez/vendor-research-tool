@@ -4,7 +4,9 @@
 
 **Integration Requirements**: Depends on domain models (E2-S1). Wraps the research pipeline (Epic 1) and scoring engine (Epic 2). Serves the frontend (Epic 4).
 
-**MoSCoW**: All stories = Must Have (E3-S1 through E3-S4) + Could Have (E3-S5, E3-S6)
+**MoSCoW**: Must Have (E3-S1 through E3-S4, E3-S6), Could Have (E3-S5)
+
+> **Note**: E3-S6 (Static File Serving) was previously labeled Could Have but is Must Have — it creates the FastAPI app entry point and `create_db_and_tables()` startup. Without it, no other story can run end-to-end.
 **Total Story Points**: 12
 
 ---

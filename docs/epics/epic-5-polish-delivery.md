@@ -4,7 +4,7 @@
 
 **Integration Requirements**: Builds on all previous epics. E5-S1 (project setup) should actually be implemented first in the build order — it provides the scaffold for all other epics.
 
-**MoSCoW**: E5-S1 + E5-S3 (Should Have), E5-S2 + E5-S4 (Could Have)
+**MoSCoW**: E5-S1 (Must Have — critical-path first story), E5-S3 (Should Have), E5-S2 + E5-S4 (Could Have)
 **Total Story Points**: 7
 
 ---
