@@ -45,6 +45,51 @@
         #error-section { margin: 20px 0; padding: 20px; background: #ffeaea; border: 1px solid #e74c3c; border-radius: 8px; }
         #error-section .error-message { color: #c0392b; font-weight: 500; }
         #retry-btn { background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+
+        /* Executive Summary */
+        #executive-summary-section { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 750px; }
+        #executive-summary-section h2 { color: #1a1a2e; margin-top: 0; }
+        #executive-summary p { line-height: 1.6; color: #333; margin-bottom: 12px; }
+        .no-summary { color: #888; font-style: italic; }
+        #rankings-list { list-style: none; padding: 0; margin: 15px 0; }
+        #rankings-list li { padding: 8px 12px; margin: 4px 0; background: #f0f0f5; border-radius: 4px; }
+
+        /* Confidence indicators */
+        .conf-high { border: 2px solid transparent; }
+        .conf-medium { border: 2px dashed #aaa; opacity: 0.8; }
+        .conf-low { border: 2px dashed #e74c3c; opacity: 0.6; }
+        .conf-label { display: block; font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px; }
+        .confidence-legend { margin: 10px 0 20px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em; color: #555; display: flex; gap: 20px; flex-wrap: wrap; }
+        .confidence-legend span { display: inline-flex; align-items: center; gap: 4px; }
+        .legend-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 3px; background: #6c757d; }
+        .legend-swatch.lg-high { border: 2px solid #333; }
+        .legend-swatch.lg-medium { border: 2px dashed #aaa; opacity: 0.8; }
+        .legend-swatch.lg-low { border: 2px dashed #e74c3c; opacity: 0.6; }
+
+        /* Drill-down panel */
+        .panel-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 999; display: none; }
+        .panel.open .panel-overlay { display: block; }
+        .panel-content { position: fixed; right: 0; top: 0; bottom: 0; width: 440px; max-width: 90vw; background: white; transform: translateX(100%); transition: transform 0.2s ease; overflow-y: auto; padding: 24px; z-index: 1000; box-shadow: -2px 0 8px rgba(0,0,0,0.15); }
+        .panel.open .panel-content { transform: translateX(0); }
+        .panel-close { position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 1.4em; cursor: pointer; color: #666; }
+        .panel-close:hover { color: #333; }
+        #panel-header { margin-bottom: 16px; border-bottom: 1px solid #eee; padding-bottom: 12px; }
+        #panel-header h3 { margin: 0 0 4px; color: #1a1a2e; }
+        #panel-header .panel-meta { font-size: 0.9em; color: #555; }
+        #panel-justification { margin-bottom: 16px; }
+        #panel-justification p { line-height: 1.5; color: #333; }
+        #panel-limitations { margin-bottom: 16px; }
+        #panel-limitations ul { padding-left: 20px; color: #555; }
+        .evidence-item { margin-bottom: 14px; padding: 10px; background: #f8f9fa; border-radius: 6px; border-left: 3px solid #ddd; }
+        .evidence-item .claim { font-size: 0.9em; color: #333; margin-bottom: 6px; }
+        .evidence-item .source-badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; color: white; margin-right: 6px; }
+        .evidence-item .source-link { font-size: 0.8em; color: #3498db; text-decoration: none; }
+        .evidence-item .source-link:hover { text-decoration: underline; }
+        .evidence-item .meta { font-size: 0.78em; color: #888; margin-top: 4px; }
+        .supports-yes { color: #2ecc71; }
+        .supports-no { color: #e74c3c; }
+        .score-cell { cursor: pointer; }
+        .score-cell:hover { filter: brightness(1.1); }
     </style>
 </head>
 <body>
@@ -70,6 +115,12 @@
 
     <!-- Results section (initially hidden) -->
     <div id="results-section" class="hidden">
+        <div id="executive-summary-section">
+            <h2>Executive Summary</h2>
+            <div id="executive-summary"></div>
+            <h3>Rankings</h3>
+            <ol id="rankings-list"></ol>
+        </div>
         <div id="matrix-container">
             <h2>Comparison Matrix</h2>
             <div class="table-scroll">
@@ -78,6 +129,24 @@
                     <tbody id="matrix-body"></tbody>
                 </table>
             </div>
+            <div class="confidence-legend" id="confidence-legend" style="display:none">
+                <strong>Confidence:</strong>
+                <span><span class="legend-swatch lg-high"></span> High (&ge;0.7)</span>
+                <span><span class="legend-swatch lg-medium"></span> Medium (0.4&ndash;0.69)</span>
+                <span><span class="legend-swatch lg-low"></span> Low (&lt;0.4) &#9888;</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drill-down panel -->
+    <div id="drill-down-panel" class="panel">
+        <div class="panel-overlay" onclick="closePanel()"></div>
+        <div class="panel-content">
+            <button class="panel-close" onclick="closePanel()">&times;</button>
+            <div id="panel-header"></div>
+            <div id="panel-justification"></div>
+            <div id="panel-limitations"></div>
+            <div id="panel-evidence-list"></div>
         </div>
     </div>
 
@@ -87,6 +156,17 @@
     </div>
 
     <script>
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function sanitizeUrl(url) {
+            if (!url) return '#';
+            try { const u = new URL(url); return ['http:', 'https:'].includes(u.protocol) ? url : '#'; }
+            catch { return '#'; }
+        }
+
         function getScoreColor(score) {
             if (score === null || score === undefined) return 'score-none';
             if (score >= 7) return 'score-green';
@@ -105,7 +185,7 @@
             const thead = document.getElementById('matrix-head');
             let headerRow = '<tr><th>Requirement</th>';
             for (const r of rankings.sort((a, b) => a.rank - b.rank)) {
-                headerRow += `<th>#${r.rank} ${r.vendor}\n(${r.overall_score.toFixed(1)})</th>`;
+                headerRow += `<th>#${r.rank} ${escapeHtml(r.vendor)}\n(${r.overall_score.toFixed(1)})</th>`;
             }
             headerRow += '</tr>';
             thead.innerHTML = headerRow;
@@ -136,8 +216,13 @@
                         const scoreResult = matrix[vendor] && matrix[vendor][req.id];
                         if (scoreResult) {
                             const score = scoreResult.score;
+                            const conf = scoreResult.confidence;
                             const colorClass = getScoreColor(score);
-                            bodyHtml += `<td class="score-cell ${colorClass}">${score.toFixed(1)}</td>`;
+                            const confClass = conf >= 0.7 ? 'conf-high' : conf >= 0.4 ? 'conf-medium' : 'conf-low';
+                            const warnIcon = conf < 0.4 ? ' &#9888;' : '';
+                            bodyHtml += `<td class="score-cell ${colorClass} ${confClass}" data-vendor="${escapeHtml(vendor)}" data-req="${escapeHtml(req.id)}" onclick="openDrillDown(this.dataset.vendor,this.dataset.req)">`;
+                            bodyHtml += `<span class="score-value">${score.toFixed(1)}${warnIcon}</span>`;
+                            bodyHtml += `<span class="conf-label">conf: ${conf.toFixed(2)}</span></td>`;
                         } else {
                             bodyHtml += `<td class="score-cell score-none">&mdash;</td>`;
                         }
@@ -148,12 +233,33 @@
 
             tbody.innerHTML = bodyHtml;
 
+            document.getElementById('confidence-legend').style.display = 'flex';
             document.getElementById('results-section').classList.remove('hidden');
             document.getElementById('no-results').classList.add('hidden');
         }
 
+        function renderSummary(results) {
+            const summaryEl = document.getElementById('executive-summary');
+            if (!results.summary) {
+                summaryEl.innerHTML = '<p class="no-summary">Executive summary not available — see matrix for detailed scores.</p>';
+            } else {
+                const paragraphs = results.summary.split('\n\n').filter(p => p.trim());
+                summaryEl.innerHTML = paragraphs.map(p => `<p>${escapeHtml(p)}</p>`).join('');
+            }
+
+            const rankingsEl = document.getElementById('rankings-list');
+            if (results.rankings && results.rankings.length > 0) {
+                rankingsEl.innerHTML = results.rankings
+                    .sort((a, b) => a.rank - b.rank)
+                    .map(r => `<li><strong>#${r.rank} ${escapeHtml(r.vendor)}</strong> — ${r.overall_score.toFixed(1)}/10</li>`)
+                    .join('');
+            }
+        }
+
         // Helper to render results (called by other stories)
         function renderResults(results) {
+            window.currentResults = results;  // Store for drill-down (Story 4.3)
+            renderSummary(results);
             renderMatrix(results);
         }
 
@@ -247,6 +353,80 @@
             document.getElementById('error-message').textContent = 'Error: ' + message;
             document.getElementById('run-btn').disabled = false;
         }
+
+        // --- Evidence Drill-Down (Stories 4.2 + 4.3) ---
+        const BADGE_COLORS = {
+            official_docs: '#3498db',
+            github: '#2c3e50',
+            comparison: '#9b59b6',
+            blog: '#e67e22',
+            community: '#95a5a6'
+        };
+
+        function openDrillDown(vendor, reqId) {
+            if (!window.currentResults) return;
+            const scoreResult = window.currentResults.matrix[vendor] && window.currentResults.matrix[vendor][reqId];
+            if (!scoreResult) return;
+
+            const req = (window.currentResults.requirements || []).find(r => r.id === reqId);
+            const reqName = req ? req.description : reqId;
+
+            // Header
+            document.getElementById('panel-header').innerHTML =
+                `<h3>${escapeHtml(vendor)} &mdash; ${escapeHtml(reqName)}</h3>` +
+                `<div class="panel-meta">Score: <strong>${scoreResult.score.toFixed(1)}</strong>/10 &nbsp;|&nbsp; Confidence: <strong>${scoreResult.confidence.toFixed(2)}</strong></div>`;
+
+            // Justification
+            const justEl = document.getElementById('panel-justification');
+            if (scoreResult.justification) {
+                justEl.innerHTML = `<h4>Justification</h4><p>${escapeHtml(scoreResult.justification)}</p>`;
+            } else {
+                justEl.innerHTML = '';
+            }
+
+            // Limitations
+            const limEl = document.getElementById('panel-limitations');
+            if (scoreResult.limitations && scoreResult.limitations.length > 0) {
+                limEl.innerHTML = `<h4>Limitations</h4><ul>${scoreResult.limitations.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`;
+            } else {
+                limEl.innerHTML = '';
+            }
+
+            // Evidence
+            const evEl = document.getElementById('panel-evidence-list');
+            const evidence = scoreResult.evidence || [];
+            if (evidence.length === 0) {
+                evEl.innerHTML = '<p style="color:#888">No evidence collected for this pair.</p>';
+            } else {
+                const sorted = [...evidence].sort((a, b) => (b.relevance || 0) - (a.relevance || 0));
+                evEl.innerHTML = '<h4>Evidence</h4>' + sorted.map(e => {
+                    const rawClaim = e.claim || '';
+                    const claim = escapeHtml(rawClaim.length > 300 ? rawClaim.slice(0, 300) + '...' : rawClaim);
+                    const badgeColor = BADGE_COLORS[e.source_type] || '#95a5a6';
+                    const supports = e.supports_requirement
+                        ? '<span class="supports-yes">&#10003; Supports</span>'
+                        : '<span class="supports-no">&#10007; Does not support</span>';
+                    const date = e.content_date ? ` | ${escapeHtml(e.content_date)}` : '';
+                    return `<div class="evidence-item">
+                        <div class="claim">${claim}</div>
+                        <span class="source-badge" style="background:${badgeColor}">${escapeHtml(e.source_type || 'unknown')}</span>
+                        <a class="source-link" href="${sanitizeUrl(e.source_url)}" target="_blank">${escapeHtml(e.source_name || 'Source')}</a>
+                        <div class="meta">Relevance: ${(e.relevance || 0).toFixed(2)}${date} | ${supports}</div>
+                    </div>`;
+                }).join('');
+            }
+
+            document.getElementById('drill-down-panel').classList.add('open');
+        }
+
+        function closePanel() {
+            document.getElementById('drill-down-panel').classList.remove('open');
+        }
+
+        // Close panel on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closePanel();
+        });
     </script>
 </body>
 </html>
