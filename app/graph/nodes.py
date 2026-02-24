@@ -10,12 +10,20 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 
-from app.config import get_llm
+from app.config import get_llm, settings
 from app.graph.state import ResearchState
 from app.models import Requirement
 from app.prompts.research import QUERY_GENERATION_SYSTEM_PROMPT, QUERY_GENERATION_USER_TEMPLATE
 
 logger = logging.getLogger(__name__)
+
+
+async def _throttled(semaphore: asyncio.Semaphore, coro):
+    """Execute a coroutine with semaphore rate-limiting and inter-request delay."""
+    async with semaphore:
+        result = await coro
+        await asyncio.sleep(0.5)
+        return result
 
 
 def _build_fallback_queries(vendor: str, requirement_desc: str) -> list[str]:
@@ -80,7 +88,12 @@ async def generate_queries(state: ResearchState) -> dict:
     llm = get_llm()
     parser = JsonOutputParser()
 
-    tasks = [_generate_query_pair(llm, parser, vendor, req) for vendor in vendors for req in requirements]
+    sem = asyncio.Semaphore(settings.LLM_CONCURRENCY)
+    tasks = [
+        _throttled(sem, _generate_query_pair(llm, parser, vendor, req))
+        for vendor in vendors
+        for req in requirements
+    ]
 
     results = await asyncio.gather(*tasks)
 
@@ -98,7 +111,6 @@ async def generate_queries(state: ResearchState) -> dict:
 
 from tavily import AsyncTavilyClient  # noqa: E402
 
-from app.config import settings  # noqa: E402
 from app.graph.progress import emit_progress  # noqa: E402
 
 
@@ -245,8 +257,11 @@ async def extract_evidence(state: ResearchState) -> dict:
     llm = get_llm()
     parser = JsonOutputParser()
 
+    sem = asyncio.Semaphore(settings.LLM_CONCURRENCY)
     tasks = [
-        _extract_evidence_for_pair(llm, parser, vendor, req, raw_results) for vendor in vendors for req in requirements
+        _throttled(sem, _extract_evidence_for_pair(llm, parser, vendor, req, raw_results))
+        for vendor in vendors
+        for req in requirements
     ]
 
     results = await asyncio.gather(*tasks)
@@ -454,11 +469,12 @@ async def assess_capabilities(state: ResearchState) -> dict:
     llm = get_llm()
     parser = JsonOutputParser()
 
+    sem = asyncio.Semaphore(settings.LLM_CONCURRENCY)
     tasks = []
     for vendor in vendors:
         for req in requirements:
             ev = evidence_map.get(vendor, {}).get(req.id, [])
-            tasks.append(_assess_single_pair(llm, parser, vendor, req, ev))
+            tasks.append(_throttled(sem, _assess_single_pair(llm, parser, vendor, req, ev)))
 
     results = await asyncio.gather(*tasks)
 

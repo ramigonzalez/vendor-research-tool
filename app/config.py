@@ -17,8 +17,9 @@ class Settings(BaseSettings):
 
     # LLM provider selection
     LLM_PROVIDER: str = "openrouter"
-    LLM_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
+    LLM_MODEL: str = "openrouter/auto"
     LLM_TEMPERATURE: float = 0.0
+    LLM_CONCURRENCY: int = 6  # Max concurrent LLM calls (semaphore limit)
 
     # API keys — all optional, validated at runtime by get_llm()
     ANTHROPIC_API_KEY: str = ""
