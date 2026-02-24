@@ -803,3 +803,130 @@ class TestAssessCapabilities:
         assert assessment.maturity == MaturityLevel.ga
         assert assessment.limitations == ["Requires v2.0+"]
         assert assessment.supports_requirement is True
+
+
+# ---------------------------------------------------------------------------
+# Story 4.4 - generate_summary tests
+# ---------------------------------------------------------------------------
+
+from app.graph.nodes import generate_summary  # noqa: E402
+from app.models import ScoreResult, VendorRanking  # noqa: E402
+
+
+def _make_summary_state(
+    vendors: list[str] | None = None,
+    requirements: list[Requirement] | None = None,
+    rankings: list[VendorRanking] | None = None,
+    scores: dict | None = None,
+) -> ResearchState:
+    """Create a minimal ResearchState for summary generation tests."""
+    state: ResearchState = {
+        "vendors": vendors if vendors is not None else ["LangSmith", "Langfuse"],
+        "requirements": requirements
+        if requirements is not None
+        else [
+            Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high),
+            Requirement(id="R2", description="Self-hosting support", priority=Priority.high),
+        ],
+        "rankings": rankings
+        if rankings is not None
+        else [
+            VendorRanking(vendor="LangSmith", overall_score=82.5, rank=1),
+            VendorRanking(vendor="Langfuse", overall_score=78.0, rank=2),
+        ],
+        "scores": scores
+        if scores is not None
+        else {
+            "LangSmith": {
+                "R1": ScoreResult(
+                    score=8.5,
+                    confidence=0.9,
+                    capability_level=CapabilityLevel.full,
+                    maturity=MaturityLevel.ga,
+                    justification="Strong tracing support",
+                    limitations=[],
+                    evidence=[],
+                ),
+                "R2": ScoreResult(
+                    score=6.0,
+                    confidence=0.7,
+                    capability_level=CapabilityLevel.partial,
+                    maturity=MaturityLevel.ga,
+                    justification="Limited self-hosting",
+                    limitations=["Cloud-only primary"],
+                    evidence=[],
+                ),
+            },
+            "Langfuse": {
+                "R1": ScoreResult(
+                    score=7.5,
+                    confidence=0.85,
+                    capability_level=CapabilityLevel.full,
+                    maturity=MaturityLevel.ga,
+                    justification="Good tracing",
+                    limitations=[],
+                    evidence=[],
+                ),
+                "R2": ScoreResult(
+                    score=9.0,
+                    confidence=0.95,
+                    capability_level=CapabilityLevel.full,
+                    maturity=MaturityLevel.ga,
+                    justification="Full self-hosting",
+                    limitations=[],
+                    evidence=[],
+                ),
+            },
+        },
+    }
+    return state
+
+
+class TestGenerateSummary:
+    @pytest.mark.asyncio
+    async def test_returns_partial_state_dict(self) -> None:
+        """generate_summary returns {'summary': str} partial state dict."""
+        state = _make_summary_state()
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("This is an executive summary of the evaluation."))
+
+        with patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm):
+            result = await generate_summary(state)
+
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["summary"]
+        assert isinstance(result["summary"], str)
+
+    @pytest.mark.asyncio
+    async def test_fallback_on_llm_failure(self) -> None:
+        """When LLM raises an exception, fallback text is returned."""
+        state = _make_summary_state()
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM failure"))
+
+        with patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm):
+            result = await generate_summary(state)
+
+        assert "summary" in result
+        assert result["summary"] == "Executive summary not available \u2014 see matrix for detailed scores."
+
+    @pytest.mark.asyncio
+    async def test_summary_is_nonempty_on_success(self) -> None:
+        """Summary is a non-empty string when LLM succeeds."""
+        state = _make_summary_state()
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(
+            return_value=_mock_ai_message(
+                "Based on our evaluation, LangSmith leads with an overall score of 82.5. "
+                "Langfuse follows closely at 78.0, excelling in self-hosting capabilities."
+            )
+        )
+
+        with patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm):
+            result = await generate_summary(state)
+
+        assert len(result["summary"]) > 0
+        assert "LangSmith" in result["summary"]

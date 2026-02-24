@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.router import router
 from app.repository import create_db_and_tables
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -22,13 +24,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="SignalCore Vendor Research Tool", lifespan=lifespan)
 
-# Include API router - import here to avoid circular imports
-try:
-    from app.api.router import router
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    app.include_router(router)
-except ImportError:
-    pass
+app.include_router(router)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

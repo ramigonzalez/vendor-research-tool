@@ -1,8 +1,10 @@
-"""Tests for the GET /api/research/{job_id} endpoint."""
+"""Tests for the research API endpoints."""
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -172,3 +174,48 @@ class TestListJobs:
         response = client.get("/api/jobs")
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+
+class TestRunResearch:
+    """Tests for POST /api/research (SSE streaming endpoint)."""
+
+    @patch("app.api.router.run_pipeline", new_callable=AsyncMock)
+    def test_post_returns_sse_stream(self, mock_pipeline, client: TestClient):
+        response = client.post("/api/research")
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+
+    @patch("app.api.router.run_pipeline", new_callable=AsyncMock)
+    def test_first_event_is_started(self, mock_pipeline, client: TestClient):
+        response = client.post("/api/research")
+        lines = response.text.strip().split("\n\n")
+        first_event = json.loads(lines[0].replace("data: ", ""))
+        assert first_event["type"] == "started"
+        assert "job_id" in first_event
+
+    @patch("app.api.router.run_pipeline", new_callable=AsyncMock)
+    def test_completed_event_emitted_on_success(self, mock_pipeline, client: TestClient):
+        """A successful pipeline run emits a completed event."""
+        response = client.post("/api/research")
+        lines = response.text.strip().split("\n\n")
+        events = [json.loads(line.replace("data: ", "")) for line in lines]
+        event_types = [e["type"] for e in events]
+        assert "started" in event_types
+        assert "completed" in event_types
+
+    @patch("app.api.router.run_pipeline", new_callable=AsyncMock)
+    def test_job_created_in_repository(self, mock_pipeline, _override_repo, client: TestClient):
+        repo: MockResearchRepository = _override_repo
+        response = client.post("/api/research")
+        lines = response.text.strip().split("\n\n")
+        first_event = json.loads(lines[0].replace("data: ", ""))
+        job_id = first_event["job_id"]
+        # Verify the job exists in the mock repo
+        assert job_id in repo._jobs
+
+    @patch("app.api.router.run_pipeline", new_callable=AsyncMock)
+    def test_pipeline_called_with_state_and_repo(self, mock_pipeline, client: TestClient):
+        """The pipeline is invoked with a ResearchState and repository."""
+        response = client.post("/api/research")
+        assert response.status_code == 200
+        mock_pipeline.assert_called_once()

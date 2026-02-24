@@ -1,8 +1,16 @@
 """API router for research job endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+import json
+import uuid
+from datetime import datetime
 
-from app.models import JobStatus
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+
+from app.graph.pipeline import run_pipeline
+from app.graph.state import build_initial_state
+from app.models import JobStatus, ResearchJob
 from app.repository import ResearchRepository, get_repository
 
 router = APIRouter()
@@ -41,3 +49,41 @@ async def list_jobs(
     """List previous research jobs, most recent first."""
     jobs = await repo.list_jobs(limit=50)
     return [j.model_dump(mode="json") for j in jobs]
+
+
+@router.post("/api/research")
+async def run_research(
+    repo: ResearchRepository = Depends(get_repository),  # noqa: B008
+):
+    """Launch research pipeline and stream progress via SSE."""
+    job_id = str(uuid.uuid4())
+    job = ResearchJob(id=job_id, status=JobStatus.running, created_at=datetime.now())
+    await repo.create_job(job)
+
+    queue: asyncio.Queue = asyncio.Queue()  # type: ignore[type-arg]
+
+    async def event_generator():
+        yield f"data: {json.dumps({'type': 'started', 'job_id': job_id})}\n\n"
+
+        state = build_initial_state(job_id, queue)
+        pipeline_task = asyncio.create_task(run_pipeline(state, repo))
+
+        while not pipeline_task.done() or not queue.empty():
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                yield f"data: {json.dumps(event)}\n\n"
+            except TimeoutError:
+                continue
+
+        if pipeline_task.exception():
+            err = str(pipeline_task.exception())
+            yield f"data: {json.dumps({'type': 'error', 'message': err})}\n\n"
+            await repo.update_job_status(job_id, JobStatus.failed, 100, err)
+        else:
+            results = await repo.get_results(job_id)
+            if results:
+                yield f"data: {json.dumps({'type': 'completed', 'results': results.model_dump(mode='json')})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'completed', 'results': {}})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

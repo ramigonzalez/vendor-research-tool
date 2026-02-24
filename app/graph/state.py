@@ -22,3 +22,24 @@ class ResearchState(TypedDict, total=False):
     iteration: int
     gaps: list[dict]
     progress_queue: asyncio.Queue  # type: ignore[type-arg]
+
+
+def build_initial_state(job_id: str, queue: asyncio.Queue) -> ResearchState:  # type: ignore[type-arg]
+    """Create the initial ResearchState for a new pipeline run."""
+    from app.config import REQUIREMENTS, VENDORS
+
+    return ResearchState(
+        job_id=job_id,
+        vendors=VENDORS,
+        requirements=REQUIREMENTS,
+        queries={},
+        raw_results={},
+        evidence={},
+        assessments={},
+        scores={},
+        rankings=[],
+        summary="",
+        iteration=0,
+        gaps=[],
+        progress_queue=queue,
+    )

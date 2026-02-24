@@ -519,3 +519,52 @@ async def compute_rankings(state: ResearchState) -> dict:
     rankings = compute_vendor_rankings(scores, requirements)
     await emit_progress(state, "scoring", 85, "Rankings computed")
     return {"rankings": rankings}
+
+
+# ---------------------------------------------------------------------------
+# Story 4.4 - Executive Summary Generation
+# ---------------------------------------------------------------------------
+
+from app.prompts.synthesis import SUMMARY_GENERATION_SYSTEM_PROMPT, SUMMARY_GENERATION_USER_TEMPLATE  # noqa: E402
+
+
+async def generate_summary(state: ResearchState) -> dict:
+    """LangGraph node: generate executive summary from evaluation results."""
+    vendors = state.get("vendors", [])
+    requirements = state.get("requirements", [])
+    rankings = state.get("rankings", [])
+    scores = state.get("scores", {})
+
+    # Build score highlights
+    highlights: list[str] = []
+    for r in rankings:
+        vendor = r.vendor
+        vendor_scores = scores.get(vendor, {})
+        top_reqs = sorted(vendor_scores.items(), key=lambda x: -x[1].score)[:3]
+        for req_id, sr in top_reqs:
+            highlights.append(f"{vendor} - {req_id}: {sr.score:.1f}/10 (confidence: {sr.confidence:.2f})")
+
+    req_summary = ", ".join(f"{r.id}: {r.description} ({r.priority.value})" for r in requirements)
+    rank_summary = ", ".join(f"#{r.rank} {r.vendor} ({r.overall_score:.1f})" for r in rankings)
+
+    user_content = SUMMARY_GENERATION_USER_TEMPLATE.format(
+        vendors=", ".join(vendors),
+        requirements=req_summary,
+        rankings=rank_summary,
+        score_highlights="\n".join(highlights[:12]),
+    )
+
+    try:
+        llm = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)  # type: ignore[call-arg]
+        messages = [
+            SystemMessage(content=SUMMARY_GENERATION_SYSTEM_PROMPT),
+            HumanMessage(content=user_content),
+        ]
+        result = await llm.ainvoke(messages)
+        summary = str(result.content)
+    except Exception:
+        logger.warning("Summary generation failed, using fallback", exc_info=True)
+        summary = "Executive summary not available — see matrix for detailed scores."
+
+    await emit_progress(state, "synthesis", 95, "Summary generated")
+    return {"summary": summary}
