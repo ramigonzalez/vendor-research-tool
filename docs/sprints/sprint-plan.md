@@ -235,6 +235,61 @@ Wave 8:  [5.2]  [5.3]  [5.4]
 
 ---
 
+## Quality Gate Integration
+
+Every wave must pass a **3-layer quality gate** before proceeding. Layers execute sequentially with fail-fast behavior.
+
+### Quality Gate Layers
+
+| Layer | Name | Trigger | Blocking | Owner |
+|-------|------|---------|----------|-------|
+| **1** | Automated Quality Gates | Every wave exit | Yes — fail = wave blocked | `make check` (CI) |
+| **2** | Per-Story Agent Review | Every wave exit (after Layer 1) | Yes — FAIL verdict = wave blocked | Story's `quality_gate` agent |
+| **3** | Human @architect Review | After Wave 6 (MVP) and Wave 8 (Final) | Yes — signoff required | @architect (human) |
+
+### Layer 1 Tooling
+
+| Tool | Version | Purpose | Config Location |
+|------|---------|---------|-----------------|
+| **ruff** | ≥0.8.0 | Linting + formatting (Rust-based, fast) | `[tool.ruff]` in `pyproject.toml` |
+| **pyright** | latest | Static type checking (basic mode) | `[tool.pyright]` in `pyproject.toml` |
+| **pytest-cov** | ≥6.0.0 | Test runner + coverage enforcement | `[tool.pytest.ini_options]` in `pyproject.toml` |
+| **pip-audit** | ≥2.7.0 | Security vulnerability scanning (optional) | `make security` |
+
+### Coverage Threshold
+
+- **Target**: ≥60% line coverage on `app/` (enforced by `--cov-fail-under=60`)
+- **Rationale**: Realistic for LLM-calling code where external API calls are mocked. Strict 80% would require excessive mock scaffolding for a prototype.
+- **Omitted**: `__init__.py` files (no meaningful logic)
+
+### Layer 2 Agent Assignments
+
+Each story declares its quality gate reviewer in the YAML header:
+```yaml
+quality_gate: "@architect"       # or "@qa", "@dev"
+quality_gate_tools: ["Read", "Grep", "mcp__ide__getDiagnostics"]
+```
+
+The assigned agent verifies all ACs are met, wave log is complete, and code follows conventions. See [Wave Execution Protocol — Layer 2](./wave-execution-protocol.md) for full protocol.
+
+### Layer 3 Checkpoints
+
+| Checkpoint | After Wave | Gate Focus |
+|------------|-----------|------------|
+| **MVP Gate** | Wave 6 | End-to-end flow works, architecture sound, no critical debt |
+| **Final Delivery** | Wave 8 | Polish quality, docs complete, demo-ready |
+
+### Deferred Quality Items (post-MVP)
+
+| Item | Severity | Reason for Deferral |
+|------|----------|-------------------|
+| Integration tests | Medium | Requires full pipeline; unit tests sufficient for prototype |
+| Frontend quality checks (ESLint) | Medium | Minimal HTML/JS in static files |
+| License audit | Low | No distribution planned |
+| Log validation automation | Low | Manual review sufficient at this scale |
+
+---
+
 ## Risk Mitigation for Parallel Execution
 
 ### File Conflicts

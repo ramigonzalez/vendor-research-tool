@@ -95,12 +95,52 @@ The log MUST contain the following sections:
 
 1. Read the COMPLETE story spec before writing any code
 2. Check file ownership — only modify files you own
-3. Run tests after implementation: `python -m pytest tests/ -x --tb=short`
+3. Run quality checks after implementation: `make check` (lint → format-check → typecheck → test+coverage)
 4. Write your wave log BEFORE signaling completion
 5. If you encounter an error you can't resolve in 3 attempts, STOP and document it in the wave log with status `failed`
 6. Do NOT modify files outside your ownership list
 7. Do NOT skip acceptance criteria — implement ALL of them
 8. Follow existing code patterns (check prior wave outputs for style)
+
+## Quality Gate Responsibilities
+
+Before signaling completion, you MUST pass all automated quality checks:
+
+### Required Commands (run in order)
+```bash
+# Format your code (auto-fix)
+python -m ruff format app/ tests/
+
+# Lint check (must be zero errors)
+python -m ruff check app/ tests/
+
+# Type check (no new errors in basic mode)
+python -m pyright app/
+
+# Tests + coverage (zero failures, ≥60% coverage)
+python -m pytest tests/ -x --tb=short --cov=app --cov-fail-under=60
+
+# Or run all at once:
+make check
+```
+
+### Post-Completion Review
+After you complete your work, a **quality gate reviewer** (specified in your story's `quality_gate` field) will verify:
+- All acceptance criteria are met
+- Wave log is complete and accurate
+- Code follows existing patterns and conventions
+- No regressions in shared files
+
+The reviewer uses the tools listed in your story's `quality_gate_tools` field. Your work must pass this review before the wave can proceed.
+
+### Quick Reference
+| Tool | Purpose | Command |
+|------|---------|---------|
+| ruff | Lint + format | `python -m ruff check app/ tests/` |
+| ruff format | Code formatting | `python -m ruff format app/ tests/` |
+| pyright | Type checking | `python -m pyright app/` |
+| pytest-cov | Tests + coverage | `python -m pytest tests/` |
+| make check | All of the above | `make check` |
 ```
 
 ---

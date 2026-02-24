@@ -37,46 +37,101 @@ Verify that files created by prior waves exist:
 | 7 | Wave 6 files + `static/index.html` (matrix rendering) |
 | 8 | Wave 7 files + `static/index.html` (confidence + drill-down) |
 
-### 3. Test Verification
+### 3. Quality Verification
 ```bash
-# Run tests from prior wave
-python -m pytest tests/ -x --tb=short
-# Verify no import errors
+# Run full quality gate from prior wave
+make check
+# Verify no import errors (redundant with make check, but explicit)
 python -c "from app.models import *; from app.config import *"
 ```
 
 ---
 
-## Wave Exit Checklist
+## Wave Exit Checklist — 3-Layer Quality Gate
 
-After ALL agents in Wave N complete:
+After ALL agents in Wave N complete, the wave must pass **all three layers** sequentially (fail-fast).
 
-### 1. Test Suite
+---
+
+### Layer 1: Automated Quality Gates (mandatory, every wave)
+
+**Single command**: `make check` — runs lint → format-check → typecheck → test+coverage sequentially, fail-fast.
+
+| Check | Command | Pass Criteria |
+|-------|---------|---------------|
+| **Linting** | `python -m ruff check app/ tests/` | Zero errors |
+| **Formatting** | `python -m ruff format --check app/ tests/` | All files conform |
+| **Type checking** | `python -m pyright app/` | No new type errors (basic mode) |
+| **Tests + coverage** | `python -m pytest tests/` | Zero failures, ≥60% coverage |
+| **Import verification** | `python -c "import app; ..."` + uvicorn healthcheck | Clean startup |
+
 ```bash
-python -m pytest tests/ -x --tb=short
-```
-- All tests must pass (zero failures)
-- New tests from this wave must be included
+# Run all Layer 1 checks at once:
+make check
 
-### 2. Type Checking
-```bash
-python -m pyright app/
-```
-- No new type errors introduced (pre-existing warnings acceptable)
-
-### 3. Import Verification
-```bash
-python -c "import app; import app.models; import app.config"
-uvicorn app.main:app --reload &
-sleep 2 && curl -s http://localhost:8000/health && kill %1
+# If make is not yet available (Wave 0), run individually:
+python -m ruff check app/ tests/ && \
+python -m ruff format --check app/ tests/ && \
+python -m pyright app/ && \
+python -m pytest tests/ -x --tb=short --cov=app --cov-fail-under=60
 ```
 
-### 4. Wave Log Verification
-- Every story in the wave has a completed log file in `docs/sprints/wave-logs/wave-N/`
-- Each log file documents files created/modified, decisions, and test results
+**Layer 1 FAIL → wave cannot proceed. Fix issues and re-run.**
 
-### 5. Exit Criteria from Sprint Plan
-Check the specific exit criteria listed in `docs/sprints/sprint-plan.md` for Wave N.
+---
+
+### Layer 2: Per-Story Quality Gate Agent Review (every wave, after Layer 1)
+
+For each story in the wave:
+
+1. **Read** the story's `quality_gate` field from its YAML header (e.g., `quality_gate: "@architect"`)
+2. **Activate** the quality gate agent (e.g., @architect or @qa) to review the story's output
+3. **Agent uses** the story's `quality_gate_tools` (e.g., `["Read", "Grep", "mcp__ide__getDiagnostics"]`) to verify:
+   - All acceptance criteria are met (checkbox each AC)
+   - Wave log is complete and accurate
+   - Code follows existing patterns and conventions
+   - No regressions introduced in shared files
+4. **Agent writes verdict** in the wave log: `PASS` | `FAIL` | `PASS_WITH_NOTES`
+5. **FAIL blocks wave exit** — agent must document what needs fixing
+
+**Review protocol per story**:
+```
+For story X.Y in Wave N:
+  1. Read docs/stories/X.Y.story-name.md → get quality_gate agent
+  2. Read docs/sprints/wave-logs/wave-N/X.Y-story-name.md → verify completeness
+  3. Review each AC → confirm implementation matches spec
+  4. Run quality_gate_tools checks → verify no diagnostics issues
+  5. Write verdict → PASS / FAIL / PASS_WITH_NOTES
+```
+
+**Recommended for Waves 2–5**: Also run @qa agent review on edge cases in async/LLM code (search execution, evidence extraction, gap analysis).
+
+---
+
+### Layer 3: Human @architect Review (milestone waves only)
+
+Layer 3 triggers only at key milestones to keep velocity high during the prototype sprint.
+
+| Checkpoint | After Wave | Focus Areas |
+|------------|-----------|-------------|
+| **MVP Gate** | Wave 6 | End-to-end flow works, architecture sound, no critical debt |
+| **Final Delivery** | Wave 8 | Polish quality, docs complete, demo-ready |
+
+**Layer 3 review includes**:
+- Architecture consistency across all completed waves
+- Security review (API key handling, input validation)
+- Performance sanity check (no obvious bottlenecks)
+- Documentation completeness (README, inline docs)
+
+---
+
+### Post-Gate: Wave Log & Sprint Plan Verification
+
+After all 3 layers pass:
+
+1. Every story in the wave has a completed log file in `docs/sprints/wave-logs/wave-N/`
+2. Each log file documents files created/modified, decisions, and test results
+3. Check the specific exit criteria listed in `docs/sprints/sprint-plan.md` for Wave N
 
 ---
 
@@ -180,11 +235,13 @@ When two agents in the same wave need the same file (rare — see ownership map)
 ## Quick Reference: Orchestrator Script Pseudocode
 
 ```python
+MILESTONE_WAVES = {6, 8}  # Layer 3 human review checkpoints
+
 for wave_num in range(9):
     # 1. Entry check
     verify_prior_wave_complete(wave_num - 1)
     verify_required_files(wave_num)
-    run_tests()
+    run_quality_gate("make check")  # Layer 1 on prior state
 
     # 2. Launch agents
     stories = get_wave_stories(wave_num)
@@ -201,11 +258,22 @@ for wave_num in range(9):
             result = await run_story_agent(story)
             results.append(result)
 
-    # 3. Exit check
-    run_tests()
-    run_type_check()
-    verify_wave_logs(wave_num)
+    # 3. Layer 1: Automated quality gates
+    run_quality_gate("make check")  # lint → format → typecheck → test+cov
 
-    # 4. Commit
+    # 4. Layer 2: Per-story quality gate agent review
+    for story in stories:
+        gate_agent = story.yaml_header["quality_gate"]  # e.g., "@architect"
+        gate_tools = story.yaml_header["quality_gate_tools"]
+        verdict = await run_quality_gate_review(gate_agent, story, gate_tools)
+        if verdict == "FAIL":
+            raise WaveExitFailed(f"Layer 2 FAIL: {story.id} — {verdict.reason}")
+
+    # 5. Layer 3: Human review (milestone waves only)
+    if wave_num in MILESTONE_WAVES:
+        await request_human_architect_review(wave_num)
+
+    # 6. Verify wave logs + commit
+    verify_wave_logs(wave_num)
     git_commit(wave_num, stories)
 ```
