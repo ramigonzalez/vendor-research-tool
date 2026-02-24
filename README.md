@@ -51,15 +51,27 @@ uvicorn app.main:app --reload
 ## Prerequisites
 
 - **Python 3.11+**
-- **Anthropic API key** -- used for LLM-based capability assessment and summary generation.
-  Sign up at [https://console.anthropic.com](https://console.anthropic.com).
 - **Tavily API key** -- used for web search queries during the research phase.
   Sign up at [https://app.tavily.com](https://app.tavily.com).
+- **LLM API key** -- one of the following, depending on your chosen provider:
+  - **OpenRouter** (default, free models available) -- sign up at [https://openrouter.ai](https://openrouter.ai)
+  - **Anthropic** -- sign up at [https://console.anthropic.com](https://console.anthropic.com)
+  - **OpenAI** -- sign up at [https://platform.openai.com](https://platform.openai.com)
 
 Create a `.env` file in the project root (or copy `.env.example`):
 
-```
+```env
+# Provider selection
+LLM_PROVIDER=openrouter
+LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
+LLM_TEMPERATURE=0
+
+# API keys (set all you have; only the active provider's key is required)
+OPENROUTER_API_KEY=sk-or-xxx
 ANTHROPIC_API_KEY=sk-ant-xxx
+OPENAI_API_KEY=sk-xxx
+
+# Always required
 TAVILY_API_KEY=tvly-xxx
 ```
 
@@ -110,7 +122,7 @@ Query Generation --> Web Search --> Evidence Extraction
 |-------------|-------------------------------------|
 | Backend     | Python 3.11+, FastAPI, Uvicorn      |
 | Pipeline    | LangGraph, LangChain                |
-| LLM         | Anthropic Claude (via langchain-anthropic) |
+| LLM         | Configurable: OpenRouter (default), Anthropic, OpenAI |
 | Web Search  | Tavily API                          |
 | Database    | SQLite with aiosqlite (WAL mode)    |
 | Frontend    | Vanilla HTML / CSS / JavaScript     |
@@ -218,6 +230,37 @@ Priority weights: **high = 3.0**, **medium = 2.0**, **low = 1.0**
 
 All research parameters are defined in `app/config.py` and can be modified without changing any other code.
 
+### LLM Provider
+
+The LLM provider is configurable via environment variables. The default is **OpenRouter** with a free Llama model for zero-cost prototyping.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_PROVIDER` | `openrouter` | Active provider: `openrouter`, `anthropic`, or `openai` |
+| `LLM_MODEL` | `meta-llama/llama-3.3-70b-instruct:free` | Model name for the selected provider |
+| `LLM_TEMPERATURE` | `0` | Sampling temperature |
+| `OPENROUTER_API_KEY` | | Required when `LLM_PROVIDER=openrouter` |
+| `ANTHROPIC_API_KEY` | | Required when `LLM_PROVIDER=anthropic` |
+| `OPENAI_API_KEY` | | Required when `LLM_PROVIDER=openai` |
+
+**Quick-switch examples:**
+
+```env
+# Free prototyping (default — no changes needed)
+LLM_PROVIDER=openrouter
+LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
+
+# Premium Anthropic results
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-5
+
+# OpenAI alternative
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o
+```
+
+You can set API keys for all three providers simultaneously in `.env`. Only the active provider's key is validated — switching providers is a one-line change to `LLM_PROVIDER`.
+
 ### Vendors
 
 The default vendor list evaluates four LLM observability platforms:
@@ -263,12 +306,7 @@ PRIORITY_WEIGHTS = {
 
 ### API Keys
 
-API keys are loaded from the `.env` file via Pydantic Settings:
-
-```
-ANTHROPIC_API_KEY=sk-ant-xxx
-TAVILY_API_KEY=tvly-xxx
-```
+API keys are loaded from the `.env` file via Pydantic Settings. Only the active provider's key and `TAVILY_API_KEY` are required. See [LLM Provider](#llm-provider) for details.
 
 ---
 

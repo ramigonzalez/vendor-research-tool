@@ -11,6 +11,7 @@
 | Change | Date | Version | Description | Author |
 |--------|------|---------|-------------|--------|
 | Initial PRD | 2026-02-23 | 1.0 | Synthesized from 3 planning documents | Morgan (@pm) |
+| Epic 6 addition | 2026-02-24 | 1.1 | Added Epic 6 (Configurable LLM Provider) — multi-provider support, ADR-006 | Morgan (@pm) |
 
 ---
 
@@ -98,7 +99,7 @@ The three planning documents represent a progressive refinement process: Documen
 - **NFR5**: The repository pattern must allow swapping SQLite for PostgreSQL with no business logic changes (interface abstraction).
 - **NFR6**: The frontend must work in modern browsers with no build tools, bundlers, or npm — pure HTML/CSS/JS.
 - **NFR7**: The system must handle evidence gaps gracefully — low confidence display, not failure, when sources are sparse.
-- **NFR8**: API keys (ANTHROPIC_API_KEY, TAVILY_API_KEY) must be loaded from environment variables / `.env` file, never hardcoded.
+- **NFR8**: API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `TAVILY_API_KEY`) must be loaded from environment variables / `.env` file, never hardcoded. Only the active LLM provider's key is required at runtime.
 
 ### 2.3 Compatibility Requirements
 
@@ -146,7 +147,7 @@ Single-page HTML application with no existing UI to integrate with. Design princ
 **Database**: SQLite via aiosqlite (async)
 **Infrastructure**: Local only — uvicorn dev server, no Docker required
 **External Dependencies**:
-- Anthropic Claude API (claude-sonnet-4-5 or equivalent for structured output)
+- Configurable LLM API: OpenRouter (default, free models), Anthropic Claude, or OpenAI (see ADR-006)
 - Tavily Search API (`/search` endpoint, sync mode via AsyncTavilyClient)
 
 ### 4.2 Integration Approach
@@ -184,7 +185,9 @@ vendor-research-tool/
 ├── tests/
 │   ├── test_scoring.py
 │   ├── test_evidence.py
-│   └── test_api.py
+│   ├── test_api.py
+│   ├── test_llm_factory.py
+│   └── test_openrouter_integration.py
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -238,6 +241,10 @@ vendor-research-tool/
 **Decision**: Abstract `ResearchRepository` interface; `SQLiteResearchRepository` implementation.
 **Rationale**: Type-safe data access; easy PostgreSQL migration; testable with mock implementation.
 
+### ADR-006: Configurable LLM Provider with OpenRouter Default
+**Decision**: Replace hardcoded `ChatAnthropic` with a `get_llm()` factory function supporting three providers (`openrouter`, `anthropic`, `openai`), defaulting to OpenRouter with a free Llama model.
+**Rationale**: Enables zero-cost prototyping via free OpenRouter models; allows clients to bring their own API keys for higher-quality results; single `LLM_PROVIDER` env var controls provider selection; lazy imports avoid requiring unused packages.
+
 ---
 
 ## 6. Epic and Story Structure
@@ -251,6 +258,7 @@ vendor-research-tool/
 | 3 | API & Persistence Layer | 6 | 12 | Must Have |
 | 4 | Results UI | 5 | 12 | Must Have + Should Have |
 | 5 | Polish & Delivery | 4 | 7 | Should Have + Could Have |
+| 6 | Configurable LLM Provider | 5 | 9 | Must Have + Should Have + Could Have |
 
 **Build Order (Critical Path)**:
 `E5-S1 → E2-S1 → E3-S1 → E3-S2 → E1-S1 → E1-S2 → E1-S3 → E1-S4 → E2-S2 → E2-S3 → E2-S4 → E2-S5 → E1-S5 → E3-S3 → E3-S4 → E3-S5 → E3-S6 → E4-S5 → E4-S1 → E4-S2 → E4-S3 → E4-S4 → E5-S2 → E5-S3 → E5-S4`
@@ -291,4 +299,4 @@ vendor-research-tool/
 ---
 
 *— Morgan, planejando o futuro 📊*
-*Sharded epics: `docs/prd/epic-{1-5}-*.md` | Stories: `docs/stories/{epic}.{story}.*.md`*
+*Sharded epics: `docs/epics/epic-{1-6}-*.md` | Stories: `docs/stories/{epic}.{story}.*.md`*

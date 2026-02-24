@@ -77,7 +77,7 @@ class TestGenerateQueries:
         mock_parser.ainvoke = AsyncMock(return_value={"query_1": "test query 1", "query_2": "test query 2"})
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await generate_queries(state)
@@ -104,7 +104,7 @@ class TestGenerateQueries:
         mock_parser.ainvoke = AsyncMock(return_value={"query_1": "q1", "query_2": "q2"})
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await generate_queries(state)
@@ -127,7 +127,7 @@ class TestGenerateQueries:
         mock_parser.ainvoke = AsyncMock(side_effect=Exception("Failed to parse"))
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await generate_queries(state)
@@ -154,7 +154,7 @@ class TestGenerateQueries:
         mock_parser.ainvoke = AsyncMock(return_value={"query_1": "some query"})
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await generate_queries(state)
@@ -171,7 +171,7 @@ class TestGenerateQueries:
         state = _make_state(vendors=[], requirements=REQUIREMENTS)
 
         with (
-            patch("app.graph.nodes.ChatAnthropic"),
+            patch("app.graph.nodes.get_llm"),
             patch("app.graph.nodes.JsonOutputParser"),
         ):
             result = await generate_queries(state)
@@ -184,7 +184,7 @@ class TestGenerateQueries:
         state = _make_state(vendors=VENDORS, requirements=[])
 
         with (
-            patch("app.graph.nodes.ChatAnthropic"),
+            patch("app.graph.nodes.get_llm"),
             patch("app.graph.nodes.JsonOutputParser"),
         ):
             result = await generate_queries(state)
@@ -215,7 +215,7 @@ class TestGenerateQueries:
         )
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await generate_queries(state)
@@ -433,7 +433,7 @@ class TestExtractEvidence:
         mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_EVIDENCE_RESPONSE)
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await extract_evidence(state)
@@ -459,7 +459,7 @@ class TestExtractEvidence:
         mock_parser = AsyncMock()
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await extract_evidence(state)
@@ -483,7 +483,7 @@ class TestExtractEvidence:
         mock_parser = AsyncMock()
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await extract_evidence(state)
@@ -559,7 +559,7 @@ class TestExtractEvidence:
         mock_parser.ainvoke = AsyncMock(return_value=all_types_response)
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await extract_evidence(state)
@@ -582,7 +582,7 @@ class TestExtractEvidence:
         mock_parser = AsyncMock()
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await extract_evidence(state)
@@ -689,7 +689,7 @@ class TestAssessCapabilities:
         mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_ASSESSMENT_RESPONSE)
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await assess_capabilities(state)
@@ -719,7 +719,7 @@ class TestAssessCapabilities:
         mock_parser = AsyncMock()
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await assess_capabilities(state)
@@ -748,7 +748,7 @@ class TestAssessCapabilities:
         mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_ASSESSMENT_RESPONSE)
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await assess_capabilities(state)
@@ -766,7 +766,7 @@ class TestAssessCapabilities:
         state = _make_assessment_state(vendors=["LangSmith"], requirements=[], evidence={})
 
         with (
-            patch("app.graph.nodes.ChatAnthropic"),
+            patch("app.graph.nodes.get_llm"),
             patch("app.graph.nodes.JsonOutputParser"),
         ):
             result = await assess_capabilities(state)
@@ -791,7 +791,7 @@ class TestAssessCapabilities:
         mock_parser.ainvoke = AsyncMock(return_value=_MOCK_LLM_ASSESSMENT_RESPONSE)
 
         with (
-            patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm),
+            patch("app.graph.nodes.get_llm", return_value=mock_llm),
             patch("app.graph.nodes.JsonOutputParser", return_value=mock_parser),
         ):
             result = await assess_capabilities(state)
@@ -891,7 +891,7 @@ class TestGenerateSummary:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=_mock_ai_message("This is an executive summary of the evaluation."))
 
-        with patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm):
+        with patch("app.graph.nodes.get_llm", return_value=mock_llm):
             result = await generate_summary(state)
 
         assert isinstance(result, dict)
@@ -906,7 +906,7 @@ class TestGenerateSummary:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM failure"))
 
-        with patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm):
+        with patch("app.graph.nodes.get_llm", return_value=mock_llm):
             result = await generate_summary(state)
 
         assert "summary" in result
@@ -925,7 +925,7 @@ class TestGenerateSummary:
             )
         )
 
-        with patch("app.graph.nodes.ChatAnthropic", return_value=mock_llm):
+        with patch("app.graph.nodes.get_llm", return_value=mock_llm):
             result = await generate_summary(state)
 
         assert len(result["summary"]) > 0

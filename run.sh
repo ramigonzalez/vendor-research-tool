@@ -44,9 +44,30 @@ if [ ! -f ".env" ]; then
   fi
 fi
 
-# 5. Validate API keys are set
-if grep -q "sk-ant-xxx" .env 2>/dev/null || grep -q "tvly-xxx" .env 2>/dev/null; then
-  echo "[WARN] .env still has placeholder API keys — update them before running research"
+# 5. Validate API keys for the selected provider
+LLM_PROVIDER=$(grep -E "^LLM_PROVIDER=" .env 2>/dev/null | cut -d= -f2 | tr -d ' "'"'" || echo "openrouter")
+LLM_PROVIDER=${LLM_PROVIDER:-openrouter}
+
+case "$LLM_PROVIDER" in
+  openrouter)
+    if grep -qE "^OPENROUTER_API_KEY=(sk-or-xxx|)$" .env 2>/dev/null; then
+      echo "[WARN] OPENROUTER_API_KEY not set — required for LLM_PROVIDER=openrouter"
+    fi
+    ;;
+  anthropic)
+    if grep -qE "^ANTHROPIC_API_KEY=(sk-ant-xxx|)$" .env 2>/dev/null; then
+      echo "[WARN] ANTHROPIC_API_KEY not set — required for LLM_PROVIDER=anthropic"
+    fi
+    ;;
+  openai)
+    if grep -qE "^OPENAI_API_KEY=(sk-xxx|)$" .env 2>/dev/null; then
+      echo "[WARN] OPENAI_API_KEY not set — required for LLM_PROVIDER=openai"
+    fi
+    ;;
+esac
+
+if grep -qE "^TAVILY_API_KEY=(tvly-xxx|)$" .env 2>/dev/null; then
+  echo "[WARN] TAVILY_API_KEY not set — required for web search"
 fi
 
 # 6. Run quality checks (optional, skip with --skip-checks)

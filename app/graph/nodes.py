@@ -6,10 +6,11 @@ import asyncio
 import logging
 from typing import Any
 
-from langchain_anthropic import ChatAnthropic
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 
+from app.config import get_llm
 from app.graph.state import ResearchState
 from app.models import Requirement
 from app.prompts.research import QUERY_GENERATION_SYSTEM_PROMPT, QUERY_GENERATION_USER_TEMPLATE
@@ -26,7 +27,7 @@ def _build_fallback_queries(vendor: str, requirement_desc: str) -> list[str]:
 
 
 async def _generate_query_pair(
-    llm: ChatAnthropic,
+    llm: BaseChatModel,
     parser: JsonOutputParser,
     vendor: str,
     requirement: Requirement,
@@ -74,7 +75,7 @@ async def generate_queries(state: ResearchState) -> dict:
     vendors: list[str] = state.get("vendors", [])
     requirements: list[Requirement] = state.get("requirements", [])
 
-    llm = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)  # type: ignore[call-arg]
+    llm = get_llm()
     parser = JsonOutputParser()
 
     tasks = [_generate_query_pair(llm, parser, vendor, req) for vendor in vendors for req in requirements]
@@ -158,7 +159,7 @@ from app.prompts.extraction import (  # noqa: E402
 
 
 async def _extract_evidence_for_pair(
-    llm: ChatAnthropic,
+    llm: BaseChatModel,
     parser: JsonOutputParser,
     vendor: str,
     requirement: Requirement,
@@ -238,7 +239,7 @@ async def extract_evidence(state: ResearchState) -> dict:
     requirements = state.get("requirements", [])
     raw_results = state.get("raw_results", {})
 
-    llm = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)  # type: ignore[call-arg]
+    llm = get_llm()
     parser = JsonOutputParser()
 
     tasks = [
@@ -394,7 +395,7 @@ _DEFAULT_ASSESSMENT = LLMAssessment(
 
 
 async def _assess_single_pair(
-    llm: ChatAnthropic,
+    llm: BaseChatModel,
     parser: JsonOutputParser,
     vendor: str,
     requirement: Requirement,
@@ -444,7 +445,7 @@ async def assess_capabilities(state: ResearchState) -> dict:
     requirements = state.get("requirements", [])
     evidence_map = state.get("evidence", {})
 
-    llm = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)  # type: ignore[call-arg]
+    llm = get_llm()
     parser = JsonOutputParser()
 
     tasks = []
@@ -555,7 +556,7 @@ async def generate_summary(state: ResearchState) -> dict:
     )
 
     try:
-        llm = ChatAnthropic(model="claude-sonnet-4-5", temperature=0)  # type: ignore[call-arg]
+        llm = get_llm()
         messages = [
             SystemMessage(content=SUMMARY_GENERATION_SYSTEM_PROMPT),
             HumanMessage(content=user_content),

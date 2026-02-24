@@ -1,5 +1,6 @@
 """FastAPI application with static file serving and database initialization."""
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,7 +11,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import router
+from app.config import settings
 from app.repository import create_db_and_tables
+
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -19,6 +23,7 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize database on startup."""
     await create_db_and_tables()
+    logger.info("LLM: %s / %s", settings.LLM_PROVIDER, settings.LLM_MODEL)
     yield
 
 
