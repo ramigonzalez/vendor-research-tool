@@ -9,9 +9,7 @@ import pytest
 
 from app.graph.pipeline import build_research_graph, run_pipeline
 from app.models import CapabilityLevel, Evidence, JobStatus, MaturityLevel, ScoreResult, SourceType, VendorRanking
-
 from tests.conftest import MockResearchRepository
-
 
 # --- build_research_graph ---
 
@@ -174,9 +172,10 @@ async def test_run_pipeline_emits_progress_and_completed(mock_repo: MockResearch
 
 
 async def test_run_pipeline_failure_emits_error_and_raises(mock_repo: MockResearchRepository, queue: asyncio.Queue) -> None:
-    from app.models import ResearchJob
     # Pre-create the job so update_job_status works
     from datetime import UTC, datetime
+
+    from app.models import ResearchJob
     job = ResearchJob(id="job-123", status=JobStatus.running, created_at=datetime.now(UTC), progress_pct=0)
     await mock_repo.create_job(job)
 
