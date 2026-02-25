@@ -3,6 +3,8 @@
 from datetime import datetime
 from enum import Enum
 
+from typing import Literal
+
 from pydantic import BaseModel, field_validator
 
 
@@ -100,6 +102,8 @@ class ScoreResult(BaseModel):
     justification: str
     limitations: list[str]
     evidence: list[Evidence]
+    status: Literal["ok", "degraded", "error"] = "ok"
+    status_detail: str | None = None
 
     @field_validator("score")
     @classmethod

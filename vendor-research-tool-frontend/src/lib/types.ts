@@ -16,6 +16,8 @@ export interface Evidence {
   supports_requirement: boolean;
 }
 
+export type ScoreStatus = 'ok' | 'degraded' | 'error';
+
 export interface ScoreResult {
   score: number;
   confidence: number;
@@ -24,6 +26,8 @@ export interface ScoreResult {
   justification: string;
   limitations: string[];
   evidence: Evidence[];
+  status: ScoreStatus;
+  status_detail: string | null;
 }
 
 export interface Requirement {

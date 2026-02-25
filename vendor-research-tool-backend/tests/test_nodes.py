@@ -316,7 +316,7 @@ class TestExecuteSearches:
         with patch("app.graph.nodes.AsyncTavilyClient", return_value=AsyncMock()), patch("app.graph.nodes.settings"):
             result = await execute_searches(state)
 
-        assert result == {"raw_results": {}}
+        assert result == {"raw_results": {}, "search_errors": {}}
 
     @pytest.mark.asyncio
     async def test_semaphore_limits_concurrency(self) -> None:
@@ -361,7 +361,7 @@ class TestExecuteSearches:
             result = await execute_searches(state)
 
         assert isinstance(result, dict)
-        assert list(result.keys()) == ["raw_results"]
+        assert set(result.keys()) == {"raw_results", "search_errors"}
 
 
 # ---------------------------------------------------------------------------

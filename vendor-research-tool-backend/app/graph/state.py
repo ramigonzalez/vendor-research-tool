@@ -17,6 +17,7 @@ class ResearchState(TypedDict, total=False):
     requirements: list[Requirement]
     queries: dict[str, list[str]]  # vendor -> list of queries
     raw_results: dict[str, list[dict]]  # vendor -> search results
+    search_errors: dict[str, str]  # vendor:req_id -> error message
     evidence: dict[str, dict[str, list[Evidence]]]  # vendor -> req_id -> evidence
     assessments: dict[str, dict[str, LLMAssessment]]  # vendor -> req_id -> assessment
     scores: dict[str, dict[str, ScoreResult]]  # vendor -> req_id -> score
@@ -42,6 +43,7 @@ def build_initial_state(
         requirements=REQUIREMENTS,
         queries={},
         raw_results={},
+        search_errors={},
         evidence={},
         assessments={},
         scores={},

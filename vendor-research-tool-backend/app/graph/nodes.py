@@ -152,6 +152,7 @@ async def execute_searches(state: ResearchState) -> dict:
     await emit_iteration_start(state, iteration + 1, total_searches, len(queries))
 
     raw_results: dict[str, list[dict]] = {}
+    search_errors: dict[str, str] = {}  # vendor:req_id -> error message
 
     async def search_with_limit(key: str, query_idx: int, query: str) -> tuple[str, list[dict]]:
         nonlocal completed_count
@@ -189,6 +190,8 @@ async def execute_searches(state: ResearchState) -> dict:
             except Exception as e:
                 logger.warning("Search failed for %s: %s", result_key, e)
                 completed_count += 1
+                # Track the error for the vendor:req_id pair
+                search_errors[key] = str(e)
                 return result_key, []
 
     tasks = []
@@ -206,7 +209,7 @@ async def execute_searches(state: ResearchState) -> dict:
 
     final_pct = pct_start + pct_range
     await emit_progress(state, "research", final_pct, "Search complete, extracting evidence...")
-    return {"raw_results": raw_results}
+    return {"raw_results": raw_results, "search_errors": search_errors}
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +576,7 @@ async def compute_scores(state: ResearchState) -> dict:
     requirements = state.get("requirements", [])
     evidence_map = state.get("evidence", {})
     assessments_map = state.get("assessments", {})
+    search_errors_map = state.get("search_errors", {})
 
     scores: dict[str, dict[str, ScoreResult]] = {}
 
@@ -585,6 +589,26 @@ async def compute_scores(state: ResearchState) -> dict:
             score = compute_requirement_score(assessment, ev)
             confidence = compute_confidence(ev)
 
+            # Determine status based on evidence and errors
+            pair_key = f"{vendor}:{req.id}"
+            search_error = search_errors_map.get(pair_key)
+            if search_error:
+                status = "error"
+                status_detail = f"Search failed: {search_error}"
+            elif not ev and assessment is _DEFAULT_ASSESSMENT:
+                status = "degraded"
+                status_detail = "No evidence found for this requirement"
+            elif confidence < 0.4 and assessment.capability_level.value == "unknown":
+                status = "degraded"
+                filtered = [e for e in ev if e.relevance >= 0.3]
+                if ev and not filtered:
+                    status_detail = f"{len(ev)} sources found, all below relevance threshold"
+                else:
+                    status_detail = "Insufficient evidence for reliable assessment"
+            else:
+                status = "ok"
+                status_detail = None
+
             scores[vendor][req.id] = ScoreResult(
                 score=score,
                 confidence=confidence,
@@ -593,6 +617,8 @@ async def compute_scores(state: ResearchState) -> dict:
                 justification=assessment.capability_details,
                 limitations=assessment.limitations,
                 evidence=ev,
+                status=status,
+                status_detail=status_detail,
             )
 
             await emit_score_computed(state, vendor, req.id, score, confidence)

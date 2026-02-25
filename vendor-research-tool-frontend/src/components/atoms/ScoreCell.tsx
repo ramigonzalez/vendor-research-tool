@@ -1,35 +1,50 @@
+import type { ScoreStatus } from '../../lib/types'
+
 interface ScoreCellProps {
   score: number
   confidence: number
+  status?: ScoreStatus
+  statusDetail?: string | null
   vendor: string
   requirementId: string
   requirementDesc: string
   onClick: (vendor: string, reqId: string) => void
 }
 
-function getScoreColorClass(score: number): string {
+function getScoreBarColor(score: number): string {
   if (score >= 7) return 'bg-confidence-high'
   if (score >= 4) return 'bg-confidence-medium'
   return 'bg-confidence-low'
 }
 
-function getConfidenceClass(confidence: number): string {
-  if (confidence >= 0.7) return 'border-2 border-transparent'
-  if (confidence >= 0.4) return 'border-2 border-dashed border-text-tertiary opacity-80'
-  return 'border-2 border-dashed border-confidence-low opacity-60'
+function getConfidenceTextColor(confidence: number): string {
+  if (confidence >= 0.7) return 'text-confidence-high'
+  if (confidence >= 0.4) return 'text-confidence-medium'
+  return 'text-confidence-low'
 }
 
-export function ScoreCell({ score, confidence, vendor, requirementId, requirementDesc, onClick }: ScoreCellProps) {
-  const colorClass = getScoreColorClass(score)
-  const confClass = getConfidenceClass(confidence)
+function formatConfidence(confidence: number): string {
+  return `${Math.round(confidence * 100)}%`
+}
+
+export function ScoreCell({ score, confidence, status, statusDetail, vendor, requirementId, requirementDesc, onClick }: ScoreCellProps) {
+  const effectiveStatus = status ?? (confidence > 0 ? 'ok' : 'degraded')
+  const isOk = effectiveStatus === 'ok'
+  const barColor = getScoreBarColor(score)
+  const confColor = getConfidenceTextColor(confidence)
   const warnIcon = confidence < 0.4 ? ' \u26A0' : ''
+  const barWidth = (score / 10) * 100
 
   return (
     <td
       role="button"
       tabIndex={0}
-      aria-label={`${vendor} ${requirementDesc}: score ${score.toFixed(1)}, confidence ${confidence.toFixed(2)}`}
-      className={`${colorClass} ${confClass} cursor-pointer text-white font-bold text-sm text-center px-3 py-2 rounded-xs hover:brightness-110 transition-all focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none`}
+      title={statusDetail ?? undefined}
+      aria-label={isOk
+        ? `${vendor} ${requirementDesc}: score ${score.toFixed(1)} out of 10, confidence ${formatConfidence(confidence)}`
+        : `${vendor} ${requirementDesc}: ${statusDetail ?? effectiveStatus}`
+      }
+      className={`bg-bg-primary cursor-pointer text-sm text-center px-3 py-2.5 border border-border-default hover:bg-bg-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none`}
       onClick={() => onClick(vendor, requirementId)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -38,15 +53,33 @@ export function ScoreCell({ score, confidence, vendor, requirementId, requiremen
         }
       }}
     >
-      <span className="block">{score.toFixed(1)}{warnIcon}</span>
-      <span className="block text-[10px] text-white/80 mt-0.5">conf: {confidence.toFixed(2)}</span>
+      {isOk ? (
+        <>
+          <span className="block font-bold text-text-primary">{score.toFixed(1)}</span>
+          <div className="h-1.5 mt-1 bg-border-default rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full ${barColor}`}
+              style={{ width: `${barWidth}%` }}
+            />
+          </div>
+          <span className={`block text-[10px] font-medium mt-1 ${confColor}`}>
+            {formatConfidence(confidence)}{warnIcon}
+          </span>
+        </>
+      ) : effectiveStatus === 'error' ? (
+        <span className="block text-xs text-status-error" title={statusDetail ?? undefined}>
+          {'\u26A0'} Error
+        </span>
+      ) : (
+        <span className="block text-xs text-text-tertiary italic">No evidence</span>
+      )}
     </td>
   )
 }
 
 export function EmptyScoreCell() {
   return (
-    <td className="bg-text-tertiary text-white font-bold text-sm text-center px-3 py-2 rounded-xs">
+    <td className="bg-bg-primary text-text-tertiary text-sm text-center px-3 py-2.5 border border-border-default">
       &mdash;
     </td>
   )
