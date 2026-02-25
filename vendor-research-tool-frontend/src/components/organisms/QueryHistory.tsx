@@ -15,13 +15,14 @@ export function QueryHistory({ queries }: QueryHistoryProps) {
   }
 
   return (
-    <div className="p-3">
+    <div className="p-4">
       {queries.length === 0 ? (
         <p className="text-xs text-text-tertiary italic">No queries generated yet.</p>
       ) : (
-        Array.from(grouped.entries()).map(([vendor, reqMap]) => (
-          <div key={vendor} className="mb-4">
-            <h4 className="text-sm font-semibold text-text-primary mb-1">{vendor}</h4>
+        <div className="space-y-4">
+        {Array.from(grouped.entries()).map(([vendor, reqMap]) => (
+          <div key={vendor}>
+            <h4 className="text-sm font-semibold text-text-primary mb-2">{vendor}</h4>
             {Array.from(reqMap.entries()).map(([reqId, queryInfos]) => (
               <div key={reqId} className="ml-3 mb-2">
                 <div className="text-xs font-medium text-text-secondary mb-0.5">{reqId}</div>
@@ -43,7 +44,8 @@ export function QueryHistory({ queries }: QueryHistoryProps) {
               </div>
             ))}
           </div>
-        ))
+        ))}
+        </div>
       )}
     </div>
   )

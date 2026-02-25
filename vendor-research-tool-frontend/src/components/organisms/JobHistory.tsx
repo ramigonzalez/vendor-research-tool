@@ -34,12 +34,13 @@ export function JobHistory({ onViewResults }: JobHistoryProps) {
   }
 
   return (
-    <div className="my-5">
+    <div>
       <button
         onClick={toggle}
-        className="bg-transparent border border-border-default px-4 py-2 rounded-sm cursor-pointer text-sm text-text-primary hover:bg-bg-primary font-body-ui"
+        className="w-full text-left px-4 py-3 bg-bg-secondary hover:bg-bg-primary transition-colors rounded-sm text-sm font-medium text-text-primary flex items-center justify-between cursor-pointer border border-border-subtle"
       >
-        Previous Runs {isOpen ? '\u25B2' : '\u25BC'}
+        Previous Runs
+        <span className={`transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>&#9660;</span>
       </button>
 
       {isOpen && (
@@ -59,14 +60,14 @@ export function JobHistory({ onViewResults }: JobHistoryProps) {
               return (
                 <div
                   key={j.id}
-                  className="flex items-center gap-3 px-3.5 py-2.5 my-1 bg-bg-secondary rounded-sm border border-border-subtle text-sm"
+                  className="flex items-center gap-3 px-3.5 py-2.5 my-1 bg-bg-primary rounded-sm border border-border-subtle text-sm"
                 >
                   <span className="text-text-secondary min-w-[160px]">{time}</span>
                   <Badge variant="status">{j.status}</Badge>
                   {canView && (
                     <button
                       onClick={() => onViewResults(j.id)}
-                      className="bg-accent-tertiary text-white border-none px-3 py-1 rounded-xs cursor-pointer text-xs hover:bg-accent-tertiary-hover"
+                      className="bg-accent-primary text-white border-none px-3 py-1 rounded-xs cursor-pointer text-xs hover:bg-accent-primary-hover"
                     >
                       View Results
                     </button>

@@ -13,6 +13,7 @@ Address multiple UX issues: no manual dark/light mode switch, sparse home page, 
 | 12.4 | Executive Summary & Rankings Hierarchy | Pending |
 | 12.5 | Comparison Matrix Readability | Pending |
 | 12.6 | End-to-End Score Status Tracking | Pending |
+| 12.7 | Results Layout & DS Consistency | Pending |
 
 ## Dependencies
 - Stories 12.2–12.4 depend on 12.1 (ThemeToggle component used in header)

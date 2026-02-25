@@ -44,7 +44,7 @@ export function ScoreCell({ score, confidence, status, statusDetail, vendor, req
         ? `${vendor} ${requirementDesc}: score ${score.toFixed(1)} out of 10, confidence ${formatConfidence(confidence)}`
         : `${vendor} ${requirementDesc}: ${statusDetail ?? effectiveStatus}`
       }
-      className={`bg-bg-primary cursor-pointer text-sm text-center px-3 py-2.5 border border-border-default hover:bg-bg-secondary transition-colors focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none`}
+      className={`bg-bg-primary cursor-pointer text-sm text-center px-3 py-2.5 border border-border-default hover:bg-accent-primary/5 transition-colors focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none`}
       onClick={() => onClick(vendor, requirementId)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -79,7 +79,7 @@ export function ScoreCell({ score, confidence, status, statusDetail, vendor, req
 
 export function EmptyScoreCell() {
   return (
-    <td className="bg-bg-primary text-text-tertiary text-sm text-center px-3 py-2.5 border border-border-default">
+    <td className="bg-bg-primary text-text-tertiary text-sm text-center px-3 py-2.5 border border-border-default hover:bg-accent-primary/5 transition-colors">
       &mdash;
     </td>
   )

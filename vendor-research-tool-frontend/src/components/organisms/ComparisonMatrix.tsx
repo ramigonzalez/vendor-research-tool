@@ -37,8 +37,8 @@ export function ComparisonMatrix({ results, onCellClick }: ComparisonMatrixProps
   const grouped = groupByPriority(requirements)
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Comparison Matrix</h2>
+    <div className="bg-bg-secondary rounded-sm shadow-sm border border-border-subtle p-6">
+      <h2 className="text-xl font-semibold mb-4 text-text-primary">Comparison Matrix</h2>
       <div className="overflow-x-auto -mx-3 px-3">
         <table className="border-collapse w-full min-w-[600px]">
           <thead>

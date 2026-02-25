@@ -25,11 +25,7 @@ export function SourcesVisited({ sources }: SourcesVisitedProps) {
   const sortedDomains = Array.from(byDomain.entries()).sort((a, b) => b[1].length - a[1].length)
 
   return (
-    <div className="p-3">
-      <div className="text-xs text-text-tertiary mb-3">
-        Sources ({uniqueSources.length} unique from {sources.length} searches)
-      </div>
-
+    <div className="p-4">
       {uniqueSources.length === 0 ? (
         <p className="text-xs text-text-tertiary italic">No sources discovered yet.</p>
       ) : (

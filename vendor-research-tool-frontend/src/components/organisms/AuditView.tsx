@@ -254,7 +254,6 @@ export function AuditView({
               sources={sources}
               sourceCount={sourceCount}
               currentIteration={currentIteration}
-              isComplete={isComplete}
             />
           )}
           {activeTab === 'queries' && <QueryHistory queries={queries} />}

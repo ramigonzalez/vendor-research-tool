@@ -8,6 +8,7 @@ import { ExecutiveSummary } from '../organisms/ExecutiveSummary'
 import { JobHistory } from '../organisms/JobHistory'
 import { PipelineStepper } from '../organisms/PipelineStepper'
 import { ScoringMethodology } from '../organisms/ScoringMethodology'
+import { VendorRankings } from '../organisms/VendorRankings'
 import { AuditView } from '../organisms/AuditView'
 import { LiveCounters } from '../molecules/LiveCounters'
 import { PriorityWeights } from '../molecules/PriorityWeights'
@@ -177,11 +178,13 @@ export function ResearchPage() {
               jobId={state.jobId ?? viewedJobId}
             />
 
+            <VendorRankings rankings={state.results!.rankings} />
+
+            <ComparisonMatrix results={state.results!} onCellClick={openDrillDown} />
+
             <ExecutiveSummary results={state.results!} />
 
             <ScoringMethodology />
-
-            <ComparisonMatrix results={state.results!} onCellClick={openDrillDown} />
 
             <PriorityWeights results={state.results!} />
           </div>
