@@ -38,8 +38,16 @@ Thumbs.db
 
 # Python / Project
 research.db
+*.db
+*.db-wal
+*.db-shm
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 venv/
 .coverage
+
+# Frontend
+vendor-research-tool-frontend/node_modules/
+vendor-research-tool-frontend/dist/
