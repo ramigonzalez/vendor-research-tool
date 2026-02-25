@@ -86,10 +86,10 @@ PRIORITY_WEIGHTS: dict[str, float] = {
 }
 
 REQUIREMENTS: list[Requirement] = [
-    Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high),
-    Requirement(id="R2", description="Self-hosting support", priority=Priority.high),
-    Requirement(id="R3", description="Evaluation framework", priority=Priority.medium),
-    Requirement(id="R4", description="OpenTelemetry integration", priority=Priority.medium),
-    Requirement(id="R5", description="Custom metrics", priority=Priority.low),
-    Requirement(id="R6", description="Cost transparency", priority=Priority.low),
+    Requirement(id="R1", description="Framework-agnostic tracing (not locked into LangChain or any single framework)", priority=Priority.high),
+    Requirement(id="R2", description="Self-hosting option with full data sovereignty", priority=Priority.high),
+    Requirement(id="R3", description="Built-in evaluation framework (LLM-as-judge, custom metrics, regression testing)", priority=Priority.high),
+    Requirement(id="R4", description="OpenTelemetry support for integration with existing observability stack", priority=Priority.medium),
+    Requirement(id="R5", description="Prompt management and versioning with rollback capability", priority=Priority.medium),
+    Requirement(id="R6", description="Transparent, predictable pricing at scale (100K+ traces/month)", priority=Priority.low),
 ]

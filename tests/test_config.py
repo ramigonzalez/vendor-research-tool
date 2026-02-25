@@ -28,6 +28,6 @@ def test_requirements_list() -> None:
     high_count = sum(1 for r in REQUIREMENTS if r.priority == Priority.high)
     medium_count = sum(1 for r in REQUIREMENTS if r.priority == Priority.medium)
     low_count = sum(1 for r in REQUIREMENTS if r.priority == Priority.low)
-    assert high_count == 2
+    assert high_count == 3
     assert medium_count == 2
-    assert low_count == 2
+    assert low_count == 1
