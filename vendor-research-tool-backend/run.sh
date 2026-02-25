@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ─── SignalCore Vendor Research Tool — Run Script ───
+# ─── SignalCore Vendor Research Tool — Backend Run Script ───
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
 echo "======================================"
 echo "  SignalCore Vendor Research Tool"
+echo "  Backend Server"
 echo "======================================"
 
 # 1. Check Python
@@ -19,12 +21,13 @@ fi
 PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo "[OK] Python $PYTHON_VERSION"
 
-# 2. Check/create virtual environment
-if [ ! -d "venv" ]; then
-  echo "[...] Creating virtual environment..."
-  python3 -m venv venv
+# 2. Check/create virtual environment (at repo root)
+VENV_DIR="$REPO_ROOT/venv"
+if [ ! -d "$VENV_DIR" ]; then
+  echo "[...] Creating virtual environment at $VENV_DIR..."
+  python3 -m venv "$VENV_DIR"
 fi
-source venv/bin/activate
+source "$VENV_DIR/bin/activate"
 echo "[OK] Virtual environment activated"
 
 # 3. Install dependencies
@@ -36,10 +39,10 @@ if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
     cp .env.example .env
     echo "[WARN] Created .env from .env.example — edit it with your API keys!"
-    echo "       Required: ANTHROPIC_API_KEY, TAVILY_API_KEY"
+    echo "       Required: TAVILY_API_KEY + one LLM provider key"
     exit 1
   else
-    echo "ERROR: No .env file found. Create one with ANTHROPIC_API_KEY and TAVILY_API_KEY"
+    echo "ERROR: No .env file found. Create one from .env.example"
     exit 1
   fi
 fi
@@ -95,7 +98,6 @@ print(count)
 conn.close()
 " 2>/dev/null || echo "0")
   echo "[OK] Database exists (data/research.db) — $JOB_COUNT previous job(s)"
-  echo "     NOTE: No need to delete — schema is stable and auto-initialized"
 else
   echo "[INFO] No database yet — will be created on first startup"
 fi
@@ -111,7 +113,6 @@ if lsof -ti:$PORT &>/dev/null; then
   if [[ "$REPLY" =~ ^[Yy]$ ]]; then
     kill $PIDS 2>/dev/null || true
     sleep 1
-    # Force kill if still running
     if lsof -ti:$PORT &>/dev/null; then
       kill -9 $(lsof -ti:$PORT) 2>/dev/null || true
       sleep 1
@@ -129,7 +130,7 @@ echo "======================================"
 echo "  Starting backend server..."
 echo "  Backend API:  http://localhost:$PORT/api/"
 echo "  Health check: http://localhost:$PORT/health"
-echo "  Frontend:     Run separately in vendor-research-tool-frontend/"
+echo "  Frontend:     cd ../vendor-research-tool-frontend && npm run dev"
 echo "======================================"
 echo ""
 

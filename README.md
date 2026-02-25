@@ -1,8 +1,8 @@
 # Vendor Research Tool
 
-An AI-powered research and comparison tool for LLM observability vendors. The application runs an automated pipeline that searches the web, extracts evidence, scores vendors against configurable requirements, and presents results in an interactive comparison matrix.
+An AI-powered research and comparison tool for LLM observability vendors. The application runs an automated pipeline that searches the web, extracts evidence, scores vendors against configurable requirements, and presents results in an interactive comparison matrix with real-time pipeline visualization and a full audit trail.
 
-Built with Python, FastAPI, LangGraph, and Anthropic Claude.
+Built with Python, FastAPI, LangGraph, React, TypeScript, and Tailwind CSS.
 
 ---
 
@@ -29,29 +29,32 @@ Built with Python, FastAPI, LangGraph, and Anthropic Claude.
 git clone <repository-url>
 cd vendor-research-tool
 
-# Create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate        # macOS / Linux
-# venv\Scripts\activate          # Windows
-
-# Configure environment variables
-cp .env.example .env
+# Configure backend environment
+cp vendor-research-tool-backend/.env.example vendor-research-tool-backend/.env
 # Edit .env with your API keys (see Prerequisites)
 
-# Install dependencies
-pip install -r requirements.txt
+# Start both backend + frontend
+./run.sh
 
-# Start the server
-uvicorn app.main:app --reload
+# Or start them separately:
+# Terminal 1 — Backend
+cd vendor-research-tool-backend
+./run.sh
 
-# Open http://localhost:8000 in your browser
+# Terminal 2 — Frontend
+cd vendor-research-tool-frontend
+npm install
+npm run dev
 ```
+
+Open **http://localhost:5173** in your browser.
 
 ---
 
 ## Prerequisites
 
 - **Python 3.11+**
+- **Node.js 20+** (for the React frontend)
 - **Tavily API key** -- used for web search queries during the research phase.
   Sign up at [https://app.tavily.com](https://app.tavily.com).
 - **LLM API key** -- one of the following, depending on your chosen provider:
@@ -59,7 +62,7 @@ uvicorn app.main:app --reload
   - **Anthropic** -- sign up at [https://console.anthropic.com](https://console.anthropic.com)
   - **OpenAI** -- sign up at [https://platform.openai.com](https://platform.openai.com)
 
-Create a `.env` file in the project root (or copy `.env.example`):
+Create a `.env` file in `vendor-research-tool-backend/` (or copy `.env.example`):
 
 ```env
 # Provider selection
@@ -74,13 +77,19 @@ OPENAI_API_KEY=sk-xxx
 
 # Always required
 TAVILY_API_KEY=tvly-xxx
+
+# CORS (frontend origin)
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 ---
 
 ## Architecture
 
-The application is a FastAPI server that orchestrates a LangGraph pipeline. A single-page frontend (vanilla HTML/CSS/JS) communicates with the backend over Server-Sent Events (SSE) for real-time progress updates.
+The application is a **monorepo** with two projects:
+
+- **Backend** (`vendor-research-tool-backend/`) -- FastAPI server that orchestrates a LangGraph research pipeline, stores results in SQLite, and streams progress via SSE.
+- **Frontend** (`vendor-research-tool-frontend/`) -- React + TypeScript + Tailwind CSS single-page app that renders real-time pipeline visualization, audit trail, and scoring breakdowns.
 
 ### Pipeline Phases
 
@@ -126,7 +135,16 @@ Query Generation --> Web Search --> Evidence Extraction
 | LLM         | Configurable: OpenRouter (default), Anthropic, OpenAI |
 | Web Search  | Tavily API                          |
 | Database    | SQLite with aiosqlite (WAL mode)    |
-| Frontend    | Vanilla HTML / CSS / JavaScript     |
+| Frontend    | React 19, TypeScript, Tailwind CSS v4, Vite |
+
+### Frontend Features
+
+- **Pipeline Stepper** -- 7-stage horizontal stepper showing real-time pipeline progress
+- **Research Timeline** -- Animated source pills appearing as search results arrive
+- **Audit Trail** -- 4-tab view (Timeline, Queries, Sources, Activity Log) for both live and historical runs
+- **Scoring Explanation** -- Interactive breakdowns of score formulas, confidence components, and priority weights
+- **Comparison Matrix** -- Click any cell to drill down into evidence, scores, and confidence details
+- **Accessibility** -- ARIA roles, keyboard navigation, focus management, skip-to-content link
 
 ---
 
@@ -229,7 +247,7 @@ Priority weights: **high = 3.0**, **medium = 2.0**, **low = 1.0**
 
 ## Configuration
 
-All research parameters are defined in `app/config.py` and can be modified without changing any other code.
+All research parameters are defined in `vendor-research-tool-backend/app/config.py` and can be modified without changing any other code.
 
 ### LLM Provider
 
@@ -313,13 +331,13 @@ API keys are loaded from the `.env` file via Pydantic Settings. Only the active 
 
 ## API Reference
 
-| Method | Endpoint                   | Description                                     |
-|--------|----------------------------|-------------------------------------------------|
-| GET    | `/`                        | Serve the frontend UI                           |
-| GET    | `/health`                  | Health check (returns `{"status": "ok"}`)       |
-| POST   | `/api/research`            | Start a research pipeline run (SSE stream)      |
-| GET    | `/api/research/{job_id}`   | Retrieve results for a completed job            |
-| GET    | `/api/jobs`                | List previous research jobs (most recent first) |
+| Method | Endpoint                          | Description                                        |
+|--------|-----------------------------------|----------------------------------------------------|
+| GET    | `/health`                         | Health check (returns `{"status": "ok"}`)          |
+| POST   | `/api/research`                   | Start a research pipeline run (SSE stream)         |
+| GET    | `/api/research/{job_id}`          | Retrieve results for a completed job               |
+| GET    | `/api/research/{job_id}/audit`    | Retrieve audit events for a job (chronological)    |
+| GET    | `/api/jobs`                       | List previous research jobs (most recent first)    |
 
 ### POST /api/research
 
@@ -327,6 +345,13 @@ Launches the full research pipeline. Returns a Server-Sent Events stream with pr
 
 ```
 data: {"type": "started", "job_id": "..."}
+data: {"type": "phase_start", "phase": "planning", "timestamp": "..."}
+data: {"type": "query_generated", "vendor": "...", "requirement_id": "...", "queries": [...]}
+data: {"type": "search_result", "vendor": "...", "source_url": "...", "source_name": "...", "domain": "..."}
+data: {"type": "evidence_extracted", "vendor": "...", "requirement_id": "...", "count": 3}
+data: {"type": "score_computed", "vendor": "...", "requirement_id": "...", "score": 8.5, "confidence": 0.85}
+data: {"type": "vendor_ranked", "vendor": "...", "rank": 1, "overall_score": 85.2}
+data: {"type": "phase_end", "phase": "planning", "timestamp": "..."}
 data: {"type": "progress", "phase": "research", "pct": 25, "message": "..."}
 ...
 data: {"type": "completed", "results": {...}}
@@ -340,51 +365,94 @@ Returns one of:
 - `{"status": "failed", "error": "..."}` -- pipeline failed
 - Full `ResearchResults` JSON -- pipeline completed
 
+### GET /api/research/{job_id}/audit
+
+Returns the persisted audit events for a historical job as a JSON array, sorted chronologically:
+
+```json
+[
+  {"event_type": "phase_start", "payload": {"phase": "planning"}, "created_at": "2026-02-25T..."},
+  {"event_type": "query_generated", "payload": {"vendor": "...", "queries": [...]}, "created_at": "..."}
+]
+```
+
+Returns 404 if the job does not exist, or an empty array if no audit events were recorded.
+
 ---
 
 ## Development
 
+### Running the Backend
+
+```bash
+cd vendor-research-tool-backend
+
+# Create venv and install deps
+python3 -m venv ../venv
+source ../venv/bin/activate
+pip install -r requirements.txt
+
+# Start the server
+uvicorn app.main:app --reload
+```
+
+### Running the Frontend
+
+```bash
+cd vendor-research-tool-frontend
+
+# Install deps and start dev server
+npm install
+npm run dev
+```
+
+The frontend dev server runs on port 5173 and proxies API requests to the backend on port 8000.
+
 ### Running Tests
 
 ```bash
-# Run the full test suite with coverage
+# Backend tests (from vendor-research-tool-backend/)
 pytest tests/
 
-# Run a specific test file
-pytest tests/test_scoring.py
+# Frontend tests (from vendor-research-tool-frontend/)
+npm test
+
+# Frontend scoring parity tests
+npm test -- scoring
 ```
 
-The project enforces a minimum of 60% code coverage.
+The backend enforces a minimum of 60% code coverage.
 
 ### Linting and Type Checking
 
 ```bash
-# Lint with ruff
-make lint
+# Backend (from vendor-research-tool-backend/)
+make lint          # Lint with ruff
+make format        # Auto-format
+make typecheck     # Type check with pyright
+make check         # Run all quality gates
 
-# Auto-format
-make format
-
-# Type check with pyright
-make typecheck
-
-# Run all quality gates (lint + format check + typecheck + tests)
-make check
+# Frontend (from vendor-research-tool-frontend/)
+npm run lint       # ESLint
+npm run typecheck  # TypeScript
+npm run build      # Full build (type check + Vite build)
 ```
 
 ### Security Audit
 
 ```bash
-make security    # runs pip-audit
+make security    # runs pip-audit (from backend dir)
 ```
 
 ### Code Style
 
-The project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, configured in `pyproject.toml`:
+The backend uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, configured in `pyproject.toml`:
 
 - Target: Python 3.11
 - Line length: 120 characters
 - Rules: E, W, F, I, UP, B, SIM, RUF
+
+The frontend uses ESLint with TypeScript-aware rules.
 
 ---
 
@@ -422,13 +490,13 @@ Package the application in a Docker container for reproducible deployments. Add 
 
 ### Approach and Key Decisions
 
-The core design principle is **prevention-first scoring**: the LLM never generates final scores directly. Instead, it handles what it does well (reading comprehension, structured extraction, narrative synthesis), while a deterministic formula handles scoring. Every number in the matrix is traceable — you can audit any cell back to the exact evidence items and formula inputs that produced it.
+The core design principle is **prevention-first scoring**: the LLM never generates final scores directly. Instead, it handles what it does well (reading comprehension, structured extraction, narrative synthesis), while a deterministic formula handles scoring. Every number in the matrix is traceable -- you can audit any cell back to the exact evidence items and formula inputs that produced it.
 
-**Evidence collection.** Tavily was chosen over Exa or SerpAPI for three reasons: native LangChain integration saves boilerplate in a time-constrained build; it returns NLP-summarized snippets rather than raw HTML, keeping evidence extraction prompts lean; and its per-result relevance scores provide a free signal for the confidence computation. The trade-off is single-provider dependency. Each vendor×requirement pair gets two search queries targeting different source types — official documentation and community/comparison sources — because what vendors *claim* to support and what users *actually experience* often diverge. That gap is where procurement mistakes happen.
+**Evidence collection.** Tavily was chosen over Exa or SerpAPI for three reasons: native LangChain integration saves boilerplate in a time-constrained build; it returns NLP-summarized snippets rather than raw HTML, keeping evidence extraction prompts lean; and its per-result relevance scores provide a free signal for the confidence computation. The trade-off is single-provider dependency. Each vendor x requirement pair gets two search queries targeting different source types -- official documentation and community/comparison sources -- because what vendors *claim* to support and what users *actually experience* often diverge. That gap is where procurement mistakes happen.
 
-**Scoring design.** The hybrid approach — LLM capability assessment feeding a deterministic weighted formula — makes scores reproducible and auditable. The confidence dimension is kept separate from the score deliberately: a vendor can score 8/10 with high confidence (strong, recent, authoritative evidence) or 8/10 with low confidence (sparse evidence). Both are represented differently in the UI. Penalizing through confidence rather than zeroing out sparse-evidence scores is more honest than either guessing a number or assigning zero to vendors with thin documentation.
+**Scoring design.** The hybrid approach -- LLM capability assessment feeding a deterministic weighted formula -- makes scores reproducible and auditable. The confidence dimension is kept separate from the score deliberately: a vendor can score 8/10 with high confidence (strong, recent, authoritative evidence) or 8/10 with low confidence (sparse evidence). Both are represented differently in the UI. Penalizing through confidence rather than zeroing out sparse-evidence scores is more honest than either guessing a number or assigning zero to vendors with thin documentation.
 
-**LangGraph.** The pipeline uses LangGraph to make phases explicit and inspectable. Honestly, a plain async function with a `while` loop for the gap analysis would have worked. LangGraph adds dependency overhead for what is essentially a linear pipeline with one conditional edge. It was kept because the explicit graph structure is easier to discuss architecturally and aligns with the ecosystem of tools being evaluated — but this was a deliberate trade-off, not an organic fit.
+**LangGraph.** The pipeline uses LangGraph to make phases explicit and inspectable. Honestly, a plain async function with a `while` loop for the gap analysis would have worked. LangGraph adds dependency overhead for what is essentially a linear pipeline with one conditional edge. It was kept because the explicit graph structure is easier to discuss architecturally and aligns with the ecosystem of tools being evaluated -- but this was a deliberate trade-off, not an organic fit.
 
 **SSE over polling.** A 3-minute pipeline with ~55 API calls needs real-time feedback. Server-Sent Events cut the request count from ~20 polling calls to 1 persistent connection, give the UI instant per-step updates, and eliminate the need for a GET-status endpoint while the job runs (the GET endpoint still exists for loading past results).
 
@@ -438,23 +506,23 @@ The core design principle is **prevention-first scoring**: the LLM never generat
 
 This project was built using [Claude Code](https://claude.com/claude-code) with Synkra AIOS, an AI orchestration framework that coordinates specialized agents (`@dev`, `@qa`, `@architect`) around a story-driven development workflow.
 
-**What worked well.** Working through architecture decisions with Claude *before writing any code* was the highest-leverage use of AI in this project. The three documents in `docs/initial-documentation/` capture the reasoning behind every major choice — Tavily vs. alternatives, hybrid scoring, SSE transport, repository pattern, evidence sufficiency thresholds — all worked through interactively before implementation started. No architectural regrets after the fact. From there, roughly 80% of the codebase was generated through the `@dev` agent following those plans, with the author reviewing, correcting, and verifying outputs. The test suite (14 test files, type checking, linting) was largely AI-generated, which is where the time savings are most reliable — test logic is mechanical enough to verify quickly.
+**What worked well.** Working through architecture decisions with Claude *before writing any code* was the highest-leverage use of AI in this project. The three documents in `docs/initial-documentation/` capture the reasoning behind every major choice -- Tavily vs. alternatives, hybrid scoring, SSE transport, repository pattern, evidence sufficiency thresholds -- all worked through interactively before implementation started. No architectural regrets after the fact. From there, roughly 80% of the codebase was generated through the `@dev` agent following those plans, with the author reviewing, correcting, and verifying outputs. The test suite (14 test files, type checking, linting) was largely AI-generated, which is where the time savings are most reliable -- test logic is mechanical enough to verify quickly.
 
-**Where AI went astray.** The AI's instinct is always to add scope. Enforcing the time budget required explicit intervention: each "Could Have" and "Won't Have" item in the planning documents represents a boundary held against AI suggestions. The final scope is narrower than what the AI proposed, and deliberately so. LangGraph is the other example — the AI defaulted to it without weighing whether the complexity was justified. It was kept after deliberate evaluation, not because the AI was right.
+**Where AI went astray.** The AI's instinct is always to add scope. Enforcing the time budget required explicit intervention: each "Could Have" and "Won't Have" item in the planning documents represents a boundary held against AI suggestions. The final scope is narrower than what the AI proposed, and deliberately so. LangGraph is the other example -- the AI defaulted to it without weighing whether the complexity was justified. It was kept after deliberate evaluation, not because the AI was right.
 
-**Validation.** AI-generated code was validated at two levels: automated (`make check` — lint, type-check, tests) and manual (running the full pipeline end-to-end, verifying that evidence items link to real source URLs, checking that scores move in the expected direction when evidence changes).
+**Validation.** AI-generated code was validated at two levels: automated (`make check` -- lint, type-check, tests) and manual (running the full pipeline end-to-end, verifying that evidence items link to real source URLs, checking that scores move in the expected direction when evidence changes).
 
 ---
 
 ### What I'd Improve With More Time
 
-**Multi-provider search.** The single biggest quality improvement would be fanning out to Tavily, Exa, and direct documentation scraping, then deduplicating by URL. Each provider has blind spots; coverage improves significantly when combined. This is also the fix for the recency problem — direct doc scraping always reflects the current state of a vendor's documentation.
+**Multi-provider search.** The single biggest quality improvement would be fanning out to Tavily, Exa, and direct documentation scraping, then deduplicating by URL. Each provider has blind spots; coverage improves significantly when combined. This is also the fix for the recency problem -- direct doc scraping always reflects the current state of a vendor's documentation.
 
 **Dynamic configuration.** Vendors and requirements are hardcoded in `app/config.py`. The pipeline and scoring engine already support arbitrary inputs; only the configuration layer is static. A setup flow in the UI (define vendors, enter requirements with priorities, launch) would make this a general-purpose tool rather than a one-off.
 
-**Evidence caching.** Re-running the same vendor set costs API credits and 3 minutes every time. A caching layer with a TTL would make repeat runs near-instant and enable the tool to track capability changes over time — which is far more useful than a point-in-time snapshot.
+**Evidence caching.** Re-running the same vendor set costs API credits and 3 minutes every time. A caching layer with a TTL would make repeat runs near-instant and enable the tool to track capability changes over time -- which is far more useful than a point-in-time snapshot.
 
-**Behavioral testing.** The tool currently evaluates *documentation* — what vendors claim. The more valuable signal is *behavioral* — does the API actually work as documented, what's the latency overhead, where does tracing fail? This is what a production version would add: lightweight integration tests that exercise vendor SDKs against a controlled workload. That's what moves this from a research tool to a procurement tool.
+**Behavioral testing.** The tool currently evaluates *documentation* -- what vendors claim. The more valuable signal is *behavioral* -- does the API actually work as documented, what's the latency overhead, where does tracing fail? This is what a production version would add: lightweight integration tests that exercise vendor SDKs against a controlled workload. That's what moves this from a research tool to a procurement tool.
 
 ---
 
@@ -465,7 +533,7 @@ This project was built using [Claude Code](https://claude.com/claude-code) with 
 - **Runtime** -- A full 4-vendor, 6-requirement research run takes approximately 3 minutes (55--60 Tavily searches plus multiple LLM calls).
 - **SQLite concurrency** -- SQLite is not suitable for concurrent production use with multiple simultaneous pipeline runs.
 - **No authentication** -- API endpoints are unauthenticated and intended for local use only.
-- **Rate limits** -- Large vendor lists may encounter Tavily or Anthropic API rate limits.
+- **Rate limits** -- Large vendor lists may encounter Tavily or LLM API rate limits.
 
 ---
 
@@ -473,26 +541,45 @@ This project was built using [Claude Code](https://claude.com/claude-code) with 
 
 ```
 vendor-research-tool/
-|-- app/
-|   |-- api/
-|   |   |-- router.py          # FastAPI route handlers (SSE, jobs, results)
-|   |-- graph/
-|   |   |-- nodes.py           # LangGraph node implementations
-|   |   |-- pipeline.py        # Graph assembly and execution
-|   |   |-- progress.py        # SSE progress event helpers
-|   |   |-- state.py           # Pipeline state definition
-|   |-- prompts/               # LLM prompt templates
-|   |-- scoring/
-|   |   |-- engine.py          # Score, confidence, and ranking computation
-|   |-- config.py              # Vendors, requirements, weights, API keys
-|   |-- main.py                # FastAPI app setup and lifespan
-|   |-- models.py              # Pydantic domain models
-|   |-- repository.py          # SQLite repository (abstract + implementation)
-|-- static/
-|   |-- index.html             # Single-page frontend (HTML/CSS/JS)
-|-- tests/                     # pytest test suite
-|-- .env.example               # Template for environment variables
-|-- Makefile                   # Development task shortcuts
-|-- pyproject.toml             # Ruff, pyright, and pytest configuration
-|-- requirements.txt           # Python dependencies
+|-- run.sh                          # Start both backend + frontend
+|-- vendor-research-tool-backend/
+|   |-- app/
+|   |   |-- api/
+|   |   |   |-- router.py          # FastAPI route handlers (SSE, jobs, results, audit)
+|   |   |-- graph/
+|   |   |   |-- nodes.py           # LangGraph node implementations
+|   |   |   |-- pipeline.py        # Graph assembly and execution
+|   |   |   |-- progress.py        # SSE progress event helpers + audit persistence
+|   |   |   |-- state.py           # Pipeline state definition
+|   |   |-- prompts/               # LLM prompt templates
+|   |   |-- scoring/
+|   |   |   |-- engine.py          # Score, confidence, and ranking computation
+|   |   |-- config.py              # Vendors, requirements, weights, API keys
+|   |   |-- main.py                # FastAPI app setup, CORS, lifespan
+|   |   |-- models.py              # Pydantic domain models
+|   |   |-- repository.py          # SQLite repository (abstract + implementation)
+|   |-- tests/                     # pytest test suite (200 tests, 94% coverage)
+|   |-- data/                      # SQLite database (auto-created)
+|   |-- run.sh                     # Backend-only run script
+|   |-- Makefile                   # Development task shortcuts
+|   |-- pyproject.toml             # Ruff, pyright, and pytest configuration
+|   |-- requirements.txt           # Python dependencies
+|   |-- .env.example               # Template for environment variables
+|-- vendor-research-tool-frontend/
+|   |-- src/
+|   |   |-- components/
+|   |   |   |-- atoms/             # Badge, ScoreCell
+|   |   |   |-- molecules/         # LiveCounters, SourcePill, ScoreBreakdown, ConfidenceBreakdown, PriorityWeights
+|   |   |   |-- organisms/         # ComparisonMatrix, DrillDownPanel, PipelineStepper, AuditView, ActivityFeed, etc.
+|   |   |   |-- templates/         # ResearchPage (main layout)
+|   |   |-- hooks/                 # useResearchState, useTimer
+|   |   |-- lib/                   # types, scoring, sse-client, api
+|   |   |-- styles/                # Tailwind globals with design tokens
+|   |-- package.json
+|   |-- vite.config.ts
+|   |-- tsconfig.json
+|-- docs/
+|   |-- stories/                   # Development stories (numbered by epic)
+|   |-- epics/                     # Epic documents
+|   |-- initial-documentation/     # Architecture, PRD, planning docs
 ```
