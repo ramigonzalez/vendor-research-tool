@@ -16,6 +16,7 @@ Built with Python, FastAPI, LangGraph, and Anthropic Claude.
 - [API Reference](#api-reference)
 - [Development](#development)
 - [Scaling Considerations](#scaling-considerations)
+- [Engineering Notes](#engineering-notes)
 - [Known Limitations](#known-limitations)
 - [Project Structure](#project-structure)
 
@@ -275,21 +276,21 @@ Add or remove vendors by editing this list.
 
 Six requirements are evaluated, each with a priority level:
 
-| ID  | Description                   | Priority |
-|-----|-------------------------------|----------|
-| R1  | Framework-agnostic tracing    | high     |
-| R2  | Self-hosting support          | high     |
-| R3  | Evaluation framework          | medium   |
-| R4  | OpenTelemetry integration     | medium   |
-| R5  | Custom metrics                | low      |
-| R6  | Cost transparency             | low      |
+| ID  | Description                                                                       | Priority |
+|-----|-----------------------------------------------------------------------------------|----------|
+| R1  | Framework-agnostic tracing (not locked into LangChain or any single framework)    | high     |
+| R2  | Self-hosting option with full data sovereignty                                    | high     |
+| R3  | Built-in evaluation framework (LLM-as-judge, custom metrics, regression testing)  | high     |
+| R4  | OpenTelemetry support for integration with existing observability stack           | medium   |
+| R5  | Prompt management and versioning with rollback capability                         | medium   |
+| R6  | Transparent, predictable pricing at scale (100K+ traces/month)                    | low      |
 
 To modify requirements, edit the `REQUIREMENTS` list in `app/config.py`:
 
 ```python
 REQUIREMENTS = [
-    Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high),
-    Requirement(id="R2", description="Self-hosting support", priority=Priority.high),
+    Requirement(id="R1", description="Framework-agnostic tracing (not locked into LangChain or any single framework)", priority=Priority.high),
+    Requirement(id="R2", description="Self-hosting option with full data sovereignty", priority=Priority.high),
     # Add or modify requirements here
 ]
 ```
@@ -414,6 +415,46 @@ The vendor list is a simple Python list in `app/config.py`. Scaling to 50+ vendo
 ### Containerization
 
 Package the application in a Docker container for reproducible deployments. Add a `docker-compose.yml` with PostgreSQL and Redis services for a production-ready setup.
+
+---
+
+## Engineering Notes
+
+### Approach and Key Decisions
+
+The core design principle is **prevention-first scoring**: the LLM never generates final scores directly. Instead, it handles what it does well (reading comprehension, structured extraction, narrative synthesis), while a deterministic formula handles scoring. Every number in the matrix is traceable — you can audit any cell back to the exact evidence items and formula inputs that produced it.
+
+**Evidence collection.** Tavily was chosen over Exa or SerpAPI for three reasons: native LangChain integration saves boilerplate in a time-constrained build; it returns NLP-summarized snippets rather than raw HTML, keeping evidence extraction prompts lean; and its per-result relevance scores provide a free signal for the confidence computation. The trade-off is single-provider dependency. Each vendor×requirement pair gets two search queries targeting different source types — official documentation and community/comparison sources — because what vendors *claim* to support and what users *actually experience* often diverge. That gap is where procurement mistakes happen.
+
+**Scoring design.** The hybrid approach — LLM capability assessment feeding a deterministic weighted formula — makes scores reproducible and auditable. The confidence dimension is kept separate from the score deliberately: a vendor can score 8/10 with high confidence (strong, recent, authoritative evidence) or 8/10 with low confidence (sparse evidence). Both are represented differently in the UI. Penalizing through confidence rather than zeroing out sparse-evidence scores is more honest than either guessing a number or assigning zero to vendors with thin documentation.
+
+**LangGraph.** The pipeline uses LangGraph to make phases explicit and inspectable. Honestly, a plain async function with a `while` loop for the gap analysis would have worked. LangGraph adds dependency overhead for what is essentially a linear pipeline with one conditional edge. It was kept because the explicit graph structure is easier to discuss architecturally and aligns with the ecosystem of tools being evaluated — but this was a deliberate trade-off, not an organic fit.
+
+**SSE over polling.** A 3-minute pipeline with ~55 API calls needs real-time feedback. Server-Sent Events cut the request count from ~20 polling calls to 1 persistent connection, give the UI instant per-step updates, and eliminate the need for a GET-status endpoint while the job runs (the GET endpoint still exists for loading past results).
+
+---
+
+### How AI Tools Were Used
+
+This project was built using [Claude Code](https://claude.com/claude-code) with Synkra AIOS, an AI orchestration framework that coordinates specialized agents (`@dev`, `@qa`, `@architect`) around a story-driven development workflow.
+
+**What worked well.** Working through architecture decisions with Claude *before writing any code* was the highest-leverage use of AI in this project. The three documents in `docs/initial-documentation/` capture the reasoning behind every major choice — Tavily vs. alternatives, hybrid scoring, SSE transport, repository pattern, evidence sufficiency thresholds — all worked through interactively before implementation started. No architectural regrets after the fact. From there, roughly 80% of the codebase was generated through the `@dev` agent following those plans, with the author reviewing, correcting, and verifying outputs. The test suite (14 test files, type checking, linting) was largely AI-generated, which is where the time savings are most reliable — test logic is mechanical enough to verify quickly.
+
+**Where AI went astray.** The AI's instinct is always to add scope. Enforcing the time budget required explicit intervention: each "Could Have" and "Won't Have" item in the planning documents represents a boundary held against AI suggestions. The final scope is narrower than what the AI proposed, and deliberately so. LangGraph is the other example — the AI defaulted to it without weighing whether the complexity was justified. It was kept after deliberate evaluation, not because the AI was right.
+
+**Validation.** AI-generated code was validated at two levels: automated (`make check` — lint, type-check, tests) and manual (running the full pipeline end-to-end, verifying that evidence items link to real source URLs, checking that scores move in the expected direction when evidence changes).
+
+---
+
+### What I'd Improve With More Time
+
+**Multi-provider search.** The single biggest quality improvement would be fanning out to Tavily, Exa, and direct documentation scraping, then deduplicating by URL. Each provider has blind spots; coverage improves significantly when combined. This is also the fix for the recency problem — direct doc scraping always reflects the current state of a vendor's documentation.
+
+**Dynamic configuration.** Vendors and requirements are hardcoded in `app/config.py`. The pipeline and scoring engine already support arbitrary inputs; only the configuration layer is static. A setup flow in the UI (define vendors, enter requirements with priorities, launch) would make this a general-purpose tool rather than a one-off.
+
+**Evidence caching.** Re-running the same vendor set costs API credits and 3 minutes every time. A caching layer with a TTL would make repeat runs near-instant and enable the tool to track capability changes over time — which is far more useful than a point-in-time snapshot.
+
+**Behavioral testing.** The tool currently evaluates *documentation* — what vendors claim. The more valuable signal is *behavioral* — does the API actually work as documented, what's the latency overhead, where does tracing fail? This is what a production version would add: lightweight integration tests that exercise vendor SDKs against a controlled workload. That's what moves this from a research tool to a procurement tool.
 
 ---
 
