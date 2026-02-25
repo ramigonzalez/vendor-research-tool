@@ -29,25 +29,29 @@ Built with Python, FastAPI, LangGraph, React, TypeScript, and Tailwind CSS.
 git clone <repository-url>
 cd vendor-research-tool
 
-# Configure backend environment
+# Copy and configure the backend environment file
 cp vendor-research-tool-backend/.env.example vendor-research-tool-backend/.env
-# Edit .env with your API keys (see Prerequisites)
+```
 
-# Start both backend + frontend
+Open `vendor-research-tool-backend/.env` and fill in **two required values**:
+
+```env
+TAVILY_API_KEY=tvly-...          # Required — get a free key at https://app.tavily.com
+OPENROUTER_API_KEY=sk-or-...     # Required (if using default OpenRouter provider) — free at https://openrouter.ai
+```
+
+All other values (`LLM_PROVIDER`, `LLM_MODEL`, logging, CORS, LangSmith) can be left at their defaults.
+
+```bash
+# Start both backend + frontend with a single command
 ./run.sh
-
-# Or start them separately:
-# Terminal 1 — Backend
-cd vendor-research-tool-backend
-./run.sh
-
-# Terminal 2 — Frontend
-cd vendor-research-tool-frontend
-npm install
-npm run dev
 ```
 
 Open **http://localhost:5173** in your browser.
+
+> **Separate terminals:** If you prefer running each service independently, see the [Development](#development) section.
+
+> **Non-default backend port:** If port 8000 is taken, set `VITE_API_URL=http://localhost:<port>` in `vendor-research-tool-frontend/.env.local` before starting the frontend.
 
 ---
 
@@ -406,7 +410,7 @@ npm install
 npm run dev
 ```
 
-The frontend dev server runs on port 5173 and proxies API requests to the backend on port 8000.
+The frontend dev server runs on port 5173 and makes direct API requests to the backend on port 8000 (CORS is configured via `ALLOWED_ORIGINS` in the backend `.env`). If the backend runs on a different port, set `VITE_API_URL=http://localhost:<port>` in `vendor-research-tool-frontend/.env.local`.
 
 ### Running Tests
 
