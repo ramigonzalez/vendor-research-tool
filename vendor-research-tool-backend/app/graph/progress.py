@@ -16,11 +16,17 @@ def _get_queue(state: ResearchState):
 
 
 async def _emit(state: ResearchState, event: dict[str, Any]) -> None:
-    """Put an event onto the state's progress queue. Silently returns if no queue."""
+    """Put an event onto the state's progress queue and persist as audit event."""
     queue = _get_queue(state)
-    if queue is None:
-        return
-    await queue.put(event)
+    if queue is not None:
+        await queue.put(event)
+
+    audit_callback = state.get("audit_callback")  # type: ignore[attr-defined]
+    if audit_callback is not None:
+        try:
+            await audit_callback(event.get("type", "unknown"), event)
+        except Exception:
+            pass  # Don't let audit persistence failures break the pipeline
 
 
 # --- Original event types (backward-compatible) ---

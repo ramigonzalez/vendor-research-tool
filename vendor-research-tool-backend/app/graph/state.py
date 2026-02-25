@@ -1,9 +1,12 @@
 """LangGraph state definition for the research pipeline."""
 
 import asyncio
-from typing import TypedDict
+from collections.abc import Callable, Coroutine
+from typing import Any, TypedDict
 
 from app.models import Evidence, LLMAssessment, Requirement, ScoreResult, VendorRanking
+
+AuditCallback = Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]
 
 
 class ResearchState(TypedDict, total=False):
@@ -22,13 +25,18 @@ class ResearchState(TypedDict, total=False):
     iteration: int
     gaps: list[dict]
     progress_queue: asyncio.Queue  # type: ignore[type-arg]
+    audit_callback: AuditCallback
 
 
-def build_initial_state(job_id: str, queue: asyncio.Queue) -> ResearchState:  # type: ignore[type-arg]
+def build_initial_state(
+    job_id: str,
+    queue: asyncio.Queue,  # type: ignore[type-arg]
+    audit_callback: AuditCallback | None = None,
+) -> ResearchState:
     """Create the initial ResearchState for a new pipeline run."""
     from app.config import REQUIREMENTS, VENDORS
 
-    return ResearchState(
+    state = ResearchState(
         job_id=job_id,
         vendors=VENDORS,
         requirements=REQUIREMENTS,
@@ -43,3 +51,6 @@ def build_initial_state(job_id: str, queue: asyncio.Queue) -> ResearchState:  # 
         gaps=[],
         progress_queue=queue,
     )
+    if audit_callback is not None:
+        state["audit_callback"] = audit_callback
+    return state

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ActivityEntry, QueryInfo, SourceInfo } from '../../hooks/useResearchState'
-import type { StepStatus } from '../../lib/types'
+import { apiFetch } from '../../lib/api'
+import type { AuditEvent, StepStatus } from '../../lib/types'
 import { ActivityFeed } from './ActivityFeed'
 import { QueryHistory } from './QueryHistory'
 import { ResearchTimeline } from './ResearchTimeline'
@@ -15,6 +16,8 @@ interface AuditViewProps {
   currentIteration: number
   isComplete: boolean
   hasAuditData: boolean
+  /** Job ID for fetching historical audit events */
+  jobId?: string | null
 }
 
 const tabs = [
@@ -26,19 +29,127 @@ const tabs = [
 
 type TabKey = typeof tabs[number]['key']
 
+/** Map persisted audit events into the shape the sub-components expect */
+function hydrateFromAuditEvents(events: AuditEvent[]) {
+  const sources: SourceInfo[] = []
+  const queries: QueryInfo[] = []
+  const activities: ActivityEntry[] = []
+  const stepStatuses: Record<string, StepStatus> = {
+    planning: 'pending', searching: 'pending', analyzing: 'pending',
+    scoring: 'pending', ranking: 'pending', writing: 'pending', complete: 'pending',
+  }
+  let iteration = 0
+  let id = 0
+
+  const eventStart = events.length > 0 ? new Date(events[0].created_at).getTime() : 0
+
+  for (const evt of events) {
+    const p = evt.payload
+    const ts = new Date(evt.created_at).getTime() - eventStart
+
+    switch (evt.event_type) {
+      case 'phase_start':
+        if (typeof p.phase === 'string') stepStatuses[p.phase] = 'active'
+        activities.push({ id: ++id, timestamp: ts, icon: '\u25B6', message: `Phase started: ${p.phase}`, variant: 'default', eventType: 'phase_start' })
+        break
+      case 'phase_end':
+        if (typeof p.phase === 'string') stepStatuses[p.phase] = 'complete'
+        break
+      case 'query_generated':
+        queries.push({
+          vendor: p.vendor as string,
+          requirementId: p.requirement_id as string,
+          queries: p.queries as string[],
+          isRefined: iteration > 0,
+        })
+        activities.push({ id: ++id, timestamp: ts, icon: '\uD83D\uDD0D', message: `Generated queries for ${p.vendor} \u00D7 ${p.requirement_id}`, variant: 'default', eventType: 'query_generated' })
+        break
+      case 'search_result':
+        sources.push({
+          url: p.source_url as string,
+          name: p.source_name as string,
+          domain: p.domain as string,
+          vendor: p.vendor as string,
+          requirementId: p.requirement_id as string,
+        })
+        break
+      case 'evidence_extracted':
+        activities.push({ id: ++id, timestamp: ts, icon: '\uD83D\uDCCB', message: `Extracted ${p.count} evidence items for ${p.vendor} \u00D7 ${p.requirement_id}`, variant: 'default', eventType: 'evidence_extracted' })
+        break
+      case 'score_computed':
+        activities.push({ id: ++id, timestamp: ts, icon: '\uD83D\uDCCA', message: `Scored: ${p.vendor} ${p.requirement_id} = ${(p.score as number).toFixed(1)} (conf: ${(p.confidence as number).toFixed(2)})`, variant: 'default', eventType: 'score_computed' })
+        break
+      case 'vendor_ranked':
+        activities.push({ id: ++id, timestamp: ts, icon: '\uD83C\uDFC6', message: `Ranked: #${p.rank} ${p.vendor} (${(p.overall_score as number).toFixed(1)})`, variant: 'default', eventType: 'vendor_ranked' })
+        break
+      case 'warning':
+        activities.push({ id: ++id, timestamp: ts, icon: '\u26A0\uFE0F', message: p.message as string, variant: 'warning', eventType: 'warning' })
+        break
+      case 'iteration_start':
+        iteration = p.iteration as number
+        activities.push({ id: ++id, timestamp: ts, icon: '\uD83D\uDD04', message: `Gap-fill round ${p.iteration}: searching ${p.total_searches} refined queries for ${p.gap_count} evidence gaps`, variant: 'default', eventType: 'iteration_start' })
+        break
+      case 'completed':
+        stepStatuses.complete = 'complete'
+        activities.push({ id: ++id, timestamp: ts, icon: '\u2705', message: 'Research complete', variant: 'default', eventType: 'completed' })
+        break
+      case 'started':
+        activities.push({ id: ++id, timestamp: ts, icon: '\uD83D\uDE80', message: `Research started`, variant: 'default', eventType: 'started' })
+        break
+    }
+  }
+
+  return { sources, queries, activities: activities.reverse(), stepStatuses, sourceCount: sources.length, iteration }
+}
+
 export function AuditView({
-  stepStatuses,
-  sources,
-  sourceCount,
-  queries,
-  activities,
-  currentIteration,
+  stepStatuses: liveStepStatuses,
+  sources: liveSources,
+  sourceCount: liveSourceCount,
+  queries: liveQueries,
+  activities: liveActivities,
+  currentIteration: liveIteration,
   isComplete,
   hasAuditData,
+  jobId,
 }: AuditViewProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('timeline')
+  const [historicalData, setHistoricalData] = useState<ReturnType<typeof hydrateFromAuditEvents> | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  if (!hasAuditData && isComplete) {
+  // Fetch historical audit events when viewing a completed job without live data
+  useEffect(() => {
+    if (!hasAuditData && isComplete && jobId) {
+      setLoading(true)
+      apiFetch<AuditEvent[]>(`/api/research/${jobId}/audit`)
+        .then(events => {
+          if (events.length > 0) {
+            setHistoricalData(hydrateFromAuditEvents(events))
+          }
+        })
+        .catch(() => { /* Audit data unavailable */ })
+        .finally(() => setLoading(false))
+    }
+  }, [hasAuditData, isComplete, jobId])
+
+  // Use historical data if available, otherwise use live data
+  const stepStatuses = historicalData?.stepStatuses ?? liveStepStatuses
+  const sources = historicalData?.sources ?? liveSources
+  const sourceCount = historicalData?.sourceCount ?? liveSourceCount
+  const queries = historicalData?.queries ?? liveQueries
+  const activities = historicalData?.activities ?? liveActivities
+  const currentIteration = historicalData?.iteration ?? liveIteration
+  const hasData = hasAuditData || historicalData !== null
+
+  if (loading) {
+    return (
+      <div className="my-4 p-4 bg-bg-secondary rounded-sm text-sm text-text-tertiary italic">
+        Loading audit trail...
+      </div>
+    )
+  }
+
+  if (!hasData && isComplete) {
     return (
       <div className="my-4 p-4 bg-bg-secondary rounded-sm text-sm text-text-tertiary italic">
         Audit trail not available for this run.

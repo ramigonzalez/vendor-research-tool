@@ -91,6 +91,8 @@ def _make_score(score: float = 8.5) -> ScoreResult:
 async def create_db_and_tables_on_conn(db: aiosqlite.Connection) -> None:
     """Helper: apply schema directly on an existing connection."""
     from app.repository import (
+        _AUDIT_EVENTS_TABLE,
+        _AUDIT_JOB_ID_INDEX,
         _EVIDENCE_JOB_ID_INDEX,
         _EVIDENCE_TABLE,
         _JOBS_TABLE,
@@ -102,8 +104,10 @@ async def create_db_and_tables_on_conn(db: aiosqlite.Connection) -> None:
     await db.execute(_JOBS_TABLE)
     await db.execute(_EVIDENCE_TABLE)
     await db.execute(_SCORES_TABLE)
+    await db.execute(_AUDIT_EVENTS_TABLE)
     await db.execute(_EVIDENCE_JOB_ID_INDEX)
     await db.execute(_SCORES_JOB_ID_INDEX)
+    await db.execute(_AUDIT_JOB_ID_INDEX)
     await db.commit()
 
 
@@ -137,10 +141,10 @@ async def _get_indexes(db: aiosqlite.Connection) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-async def test_all_three_tables_created(memory_db: aiosqlite.Connection) -> None:
-    """All three tables (evidence, jobs, scores) should be created."""
+async def test_all_tables_created(memory_db: aiosqlite.Connection) -> None:
+    """All four tables (audit_events, evidence, jobs, scores) should be created."""
     tables = await _get_tables(memory_db)
-    assert tables == ["evidence", "jobs", "scores"]
+    assert tables == ["audit_events", "evidence", "jobs", "scores"]
 
 
 async def test_jobs_table_columns(memory_db: aiosqlite.Connection) -> None:
@@ -246,10 +250,11 @@ async def test_scores_unique_constraint(memory_db: aiosqlite.Connection) -> None
 
 
 async def test_indexes_exist(memory_db: aiosqlite.Connection) -> None:
-    """Both job_id indexes on evidence and scores should exist."""
+    """All job_id indexes on evidence, scores, and audit_events should exist."""
     indexes = await _get_indexes(memory_db)
     assert "idx_evidence_job_id" in indexes
     assert "idx_scores_job_id" in indexes
+    assert "idx_audit_job_id" in indexes
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +267,7 @@ async def test_create_is_idempotent(memory_db: aiosqlite.Connection) -> None:
     # The fixture already called it once; call the helper again.
     await create_db_and_tables_on_conn(memory_db)
     tables = await _get_tables(memory_db)
-    assert tables == ["evidence", "jobs", "scores"]
+    assert tables == ["audit_events", "evidence", "jobs", "scores"]
 
 
 # ---------------------------------------------------------------------------
@@ -446,3 +451,63 @@ async def test_get_results_fallback_for_unknown_requirement(repo: SQLiteResearch
     assert req.id == "UNKNOWN-REQ"
     assert req.description == "UNKNOWN-REQ"
     assert req.priority == Priority.medium
+
+
+# ---------------------------------------------------------------------------
+# Audit event tests (Story 9.5)
+# ---------------------------------------------------------------------------
+
+
+async def test_audit_events_table_columns(memory_db: aiosqlite.Connection) -> None:
+    """The audit_events table should have the expected columns."""
+    columns = await _get_columns(memory_db, "audit_events")
+    expected = ["id", "job_id", "event_type", "payload_json", "created_at"]
+    assert columns == expected
+
+
+async def test_save_audit_event_persists(repo: SQLiteResearchRepository) -> None:
+    """save_audit_event should persist an event that can be retrieved."""
+    await repo.create_job(_make_job())
+    await repo.save_audit_event("job-1", "phase_start", {"phase": "searching"})
+
+    events = await repo.get_audit_events("job-1")
+    assert len(events) == 1
+    assert events[0]["event_type"] == "phase_start"
+    assert events[0]["payload"] == {"phase": "searching"}
+    assert "created_at" in events[0]
+
+
+async def test_get_audit_events_chronological_order(repo: SQLiteResearchRepository) -> None:
+    """get_audit_events should return events in insertion (chronological) order."""
+    await repo.create_job(_make_job())
+    await repo.save_audit_event("job-1", "phase_start", {"phase": "planning"})
+    await repo.save_audit_event("job-1", "query_generated", {"vendor": "A", "queries": ["q1"]})
+    await repo.save_audit_event("job-1", "phase_end", {"phase": "planning"})
+
+    events = await repo.get_audit_events("job-1")
+    assert len(events) == 3
+    assert events[0]["event_type"] == "phase_start"
+    assert events[1]["event_type"] == "query_generated"
+    assert events[2]["event_type"] == "phase_end"
+
+
+async def test_get_audit_events_empty_for_no_events(repo: SQLiteResearchRepository) -> None:
+    """get_audit_events should return empty list when no events exist for a job."""
+    await repo.create_job(_make_job())
+    events = await repo.get_audit_events("job-1")
+    assert events == []
+
+
+async def test_get_audit_events_isolates_by_job_id(repo: SQLiteResearchRepository) -> None:
+    """get_audit_events should only return events for the specified job."""
+    await repo.create_job(_make_job("job-1"))
+    await repo.create_job(_make_job("job-2"))
+    await repo.save_audit_event("job-1", "phase_start", {"phase": "planning"})
+    await repo.save_audit_event("job-2", "phase_start", {"phase": "searching"})
+
+    events_1 = await repo.get_audit_events("job-1")
+    events_2 = await repo.get_audit_events("job-2")
+    assert len(events_1) == 1
+    assert events_1[0]["payload"]["phase"] == "planning"
+    assert len(events_2) == 1
+    assert events_2[0]["payload"]["phase"] == "searching"

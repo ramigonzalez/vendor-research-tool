@@ -219,3 +219,35 @@ class TestRunResearch:
         response = client.post("/api/research")
         assert response.status_code == 200
         mock_pipeline.assert_called_once()
+
+
+class TestGetAuditEvents:
+    """Tests for GET /api/research/{job_id}/audit."""
+
+    def test_unknown_job_returns_404(self, client: TestClient):
+        response = client.get("/api/research/nonexistent-id/audit")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Job not found"
+
+    @pytest.mark.anyio()
+    async def test_returns_empty_list_when_no_events(self, _override_repo, client: TestClient):
+        repo: MockResearchRepository = _override_repo
+        await repo.create_job(_make_job("job-1", JobStatus.completed))
+
+        response = client.get("/api/research/job-1/audit")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    @pytest.mark.anyio()
+    async def test_returns_audit_events_for_valid_job(self, _override_repo, client: TestClient):
+        repo: MockResearchRepository = _override_repo
+        await repo.create_job(_make_job("job-1", JobStatus.completed))
+        await repo.save_audit_event("job-1", "phase_start", {"phase": "planning"})
+        await repo.save_audit_event("job-1", "query_generated", {"vendor": "A", "queries": ["q1"]})
+
+        response = client.get("/api/research/job-1/audit")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["event_type"] == "phase_start"
+        assert data[1]["event_type"] == "query_generated"

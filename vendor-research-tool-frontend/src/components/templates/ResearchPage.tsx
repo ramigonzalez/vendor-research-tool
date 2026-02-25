@@ -20,11 +20,15 @@ export function ResearchPage() {
   const [drillDownVendor, setDrillDownVendor] = useState<string | null>(null)
   const [drillDownReqId, setDrillDownReqId] = useState<string | null>(null)
 
+  // Track the job ID for historical audit event loading
+  const [viewedJobId, setViewedJobId] = useState<string | null>(null)
+
   const loadResults = useCallback(async (jobId: string) => {
     try {
       const data = await apiFetch<ResearchResults>(`/api/research/${jobId}`)
       if ('matrix' in data) {
         setResults(data)
+        setViewedJobId(jobId)
       }
     } catch {
       // Error loading results
@@ -94,6 +98,7 @@ export function ResearchPage() {
               currentIteration={state.currentIteration}
               isComplete={false}
               hasAuditData={hasAuditData}
+              jobId={state.jobId}
             />
           </>
         )}
@@ -123,19 +128,18 @@ export function ResearchPage() {
               />
             )}
 
-            {/* Audit View (post-research, collapsible) */}
-            {hasAuditData && isComplete && (
-              <AuditView
-                stepStatuses={state.stepStatuses}
-                sources={state.sources}
-                sourceCount={state.sourceCount}
-                queries={state.queries}
-                activities={state.activities}
-                currentIteration={state.currentIteration}
-                isComplete={true}
-                hasAuditData={hasAuditData}
-              />
-            )}
+            {/* Audit View (post-research — live data or historical fetch) */}
+            <AuditView
+              stepStatuses={state.stepStatuses}
+              sources={state.sources}
+              sourceCount={state.sourceCount}
+              queries={state.queries}
+              activities={state.activities}
+              currentIteration={state.currentIteration}
+              isComplete={true}
+              hasAuditData={hasAuditData}
+              jobId={state.jobId ?? viewedJobId}
+            />
 
             <ExecutiveSummary results={state.results} />
 

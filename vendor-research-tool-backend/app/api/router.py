@@ -68,10 +68,13 @@ async def run_research(
 
     queue: asyncio.Queue = asyncio.Queue()  # type: ignore[type-arg]
 
+    async def audit_callback(event_type: str, payload: dict) -> None:
+        await repo.save_audit_event(job_id, event_type, payload)
+
     async def event_generator():
         yield f"data: {json.dumps({'type': 'started', 'job_id': job_id})}\n\n"
 
-        state = build_initial_state(job_id, queue)
+        state = build_initial_state(job_id, queue, audit_callback=audit_callback)
         pipeline_task = asyncio.create_task(run_pipeline(state, repo))
 
         while not pipeline_task.done() or not queue.empty():
@@ -95,3 +98,17 @@ async def run_research(
                 yield f"data: {json.dumps({'type': 'completed', 'results': {}})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/api/research/{job_id}/audit")
+async def get_audit_events(
+    job_id: str,
+    repo: ResearchRepository = Depends(get_repository),  # noqa: B008
+):
+    """Retrieve audit events for a research job in chronological order."""
+    job = await repo.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    events = await repo.get_audit_events(job_id)
+    return events

@@ -154,3 +154,10 @@ export type SSEEvent =
   | SSEVendorRankedEvent
   | SSEWarningEvent
   | SSEIterationStartEvent;
+
+/** Persisted audit event returned by GET /api/research/{job_id}/audit */
+export interface AuditEvent {
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}

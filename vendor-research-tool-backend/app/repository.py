@@ -79,8 +79,19 @@ CREATE TABLE IF NOT EXISTS scores (
 )
 """
 
+_AUDIT_EVENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+)
+"""
+
 _EVIDENCE_JOB_ID_INDEX = "CREATE INDEX IF NOT EXISTS idx_evidence_job_id ON evidence(job_id)"
 _SCORES_JOB_ID_INDEX = "CREATE INDEX IF NOT EXISTS idx_scores_job_id ON scores(job_id)"
+_AUDIT_JOB_ID_INDEX = "CREATE INDEX IF NOT EXISTS idx_audit_job_id ON audit_events(job_id)"
 
 
 async def create_db_and_tables(db_path: Path | str | None = None) -> None:
@@ -98,8 +109,10 @@ async def create_db_and_tables(db_path: Path | str | None = None) -> None:
         await db.execute(_JOBS_TABLE)
         await db.execute(_EVIDENCE_TABLE)
         await db.execute(_SCORES_TABLE)
+        await db.execute(_AUDIT_EVENTS_TABLE)
         await db.execute(_EVIDENCE_JOB_ID_INDEX)
         await db.execute(_SCORES_JOB_ID_INDEX)
+        await db.execute(_AUDIT_JOB_ID_INDEX)
         await db.commit()
 
     logger.info("Database initialized at %s", path)
@@ -138,6 +151,12 @@ class ResearchRepository(ABC):
 
     @abstractmethod
     async def save_final_results(self, job_id: str, summary: str, rankings: list[VendorRanking]) -> None: ...
+
+    @abstractmethod
+    async def save_audit_event(self, job_id: str, event_type: str, payload: dict) -> None: ...
+
+    @abstractmethod
+    async def get_audit_events(self, job_id: str) -> list[dict]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +386,33 @@ class SQLiteResearchRepository(ResearchRepository):
             )
             rows = await cursor.fetchall()
             return [_row_to_job(row) for row in rows]
+
+    async def save_audit_event(self, job_id: str, event_type: str, payload: dict) -> None:
+        """Persist an audit event for a research job."""
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "INSERT INTO audit_events (job_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?)",
+                (job_id, event_type, json.dumps(payload), datetime.now(UTC).isoformat()),
+            )
+            await db.commit()
+
+    async def get_audit_events(self, job_id: str) -> list[dict]:
+        """Retrieve audit events for a job in chronological order."""
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT event_type, payload_json, created_at FROM audit_events WHERE job_id = ? ORDER BY id ASC",
+                (job_id,),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "event_type": row["event_type"],
+                    "payload": json.loads(row["payload_json"]),
+                    "created_at": row["created_at"],
+                }
+                for row in rows
+            ]
 
 
 def _row_to_job(row: aiosqlite.Row) -> ResearchJob:

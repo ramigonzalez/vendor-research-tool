@@ -30,6 +30,7 @@ class MockResearchRepository(ResearchRepository):
         self._scores: dict[str, list[tuple[str, str, ScoreResult]]] = {}  # job_id -> [(vendor, req_id, ScoreResult)]
         self._summaries: dict[str, str] = {}
         self._rankings: dict[str, list[VendorRanking]] = {}
+        self._audit_events: dict[str, list[dict]] = {}  # job_id -> [audit_event]
 
     async def create_job(self, job: ResearchJob) -> None:
         self._jobs[job.id] = job.model_copy()
@@ -105,6 +106,17 @@ class MockResearchRepository(ResearchRepository):
                     "completed_at": datetime.now(UTC),
                 }
             )
+
+    async def save_audit_event(self, job_id: str, event_type: str, payload: dict) -> None:
+        events = self._audit_events.setdefault(job_id, [])
+        events.append({
+            "event_type": event_type,
+            "payload": payload,
+            "created_at": datetime.now(UTC).isoformat(),
+        })
+
+    async def get_audit_events(self, job_id: str) -> list[dict]:
+        return list(self._audit_events.get(job_id, []))
 
 
 @pytest.fixture
