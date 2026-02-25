@@ -127,28 +127,26 @@
   }
 }
 
-/* --- Dark Mode --- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg-primary: #1a1a1a;
-    --color-bg-secondary: #242424;
-    --color-bg-elevated: #2e2e2e;
-    --color-bg-user-message: #3a3a3a;
-    --color-bg-code-block: #2a2a2a;
-    --color-bg-timeline: #1e1e1e;
-    --color-bg-table-header: #1e293b;
-    --color-bg-table-section: #2a2a2a;
+/* --- Dark Mode (class-based for manual toggle) --- */
+.dark {
+  --color-bg-primary: #1a1a1a;
+  --color-bg-secondary: #242424;
+  --color-bg-elevated: #2e2e2e;
+  --color-bg-user-message: #3a3a3a;
+  --color-bg-code-block: #2a2a2a;
+  --color-bg-timeline: #1e1e1e;
+  --color-bg-table-header: #1e293b;
+  --color-bg-table-section: #2a2a2a;
 
-    --color-text-primary: #f0f0f0;
-    --color-text-secondary: #a0a0a0;
-    --color-text-tertiary: #707070;
-    --color-text-inverse: #1a1a18;
-    --color-text-link: #2bc4b4;
+  --color-text-primary: #f0f0f0;
+  --color-text-secondary: #a0a0a0;
+  --color-text-tertiary: #707070;
+  --color-text-inverse: #1a1a18;
+  --color-text-link: #2bc4b4;
 
-    --color-border-default: #3a3a3a;
-    --color-border-subtle: #2e2e2e;
-    --color-border-focus: #2bc4b4;
-  }
+  --color-border-default: #3a3a3a;
+  --color-border-subtle: #2e2e2e;
+  --color-border-focus: #2bc4b4;
 }
 
 /* --- Base styles --- */
