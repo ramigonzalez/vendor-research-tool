@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { StepStatus } from '../../lib/types'
 import type { SourceInfo } from '../../hooks/useResearchState'
 import { SourcePill } from '../molecules/SourcePill'
@@ -22,9 +22,16 @@ const timelinePhases = [
 
 export function ResearchTimeline({ stepStatuses, sources, sourceCount, currentIteration, isComplete }: ResearchTimelineProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const prevIsCompleteRef = useRef(isComplete)
 
-  // Auto-collapse after completion with delay
-  const shouldCollapse = isComplete && isCollapsed
+  // Auto-collapse 2s after isComplete transitions to true
+  useEffect(() => {
+    if (isComplete && !prevIsCompleteRef.current) {
+      const timer = setTimeout(() => setIsCollapsed(true), 2000)
+      return () => clearTimeout(timer)
+    }
+    prevIsCompleteRef.current = isComplete
+  }, [isComplete])
 
   // Deduplicate sources by domain for display
   const uniqueDomains = new Map<string, SourceInfo>()
@@ -41,13 +48,19 @@ export function ResearchTimeline({ stepStatuses, sources, sourceCount, currentIt
       {isComplete && (
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="text-xs text-text-tertiary hover:text-text-secondary mb-2 cursor-pointer bg-transparent border-none"
+          aria-expanded={!isCollapsed}
+          className="text-xs text-text-link hover:text-accent-primary-hover mb-2 cursor-pointer bg-transparent border-none flex items-center gap-1"
         >
-          {isCollapsed ? `\u25BC Show timeline (${sourceCount} sources found)` : '\u25B2 Collapse timeline'}
+          <span className={`inline-block transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}>&#9660;</span>
+          {isCollapsed ? `Show timeline (${sourceCount} sources found)` : 'Collapse timeline'}
         </button>
       )}
 
-      {!shouldCollapse && (
+      <div
+        className={`overflow-hidden transition-all duration-500 ease-smooth ${
+          isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[2000px] opacity-100'
+        }`}
+      >
         <div className="space-y-3">
           {timelinePhases.map(phase => {
             const status = stepStatuses[phase.key] || 'pending'
@@ -102,7 +115,7 @@ export function ResearchTimeline({ stepStatuses, sources, sourceCount, currentIt
             )
           })}
         </div>
-      )}
+      </div>
     </div>
   )
 }
