@@ -11,6 +11,7 @@ import { ScoringMethodology } from '../organisms/ScoringMethodology'
 import { AuditView } from '../organisms/AuditView'
 import { LiveCounters } from '../molecules/LiveCounters'
 import { PriorityWeights } from '../molecules/PriorityWeights'
+import { ThemeToggle } from '../atoms/ThemeToggle'
 
 export function ResearchPage() {
   const { state, startResearch, setResults } = useResearchState()
@@ -47,6 +48,8 @@ export function ResearchPage() {
 
   const isComplete = state.currentPhase === 'complete'
   const hasAuditData = state.activities.length > 0 || state.queries.length > 0
+  const hasResults = !!state.results
+  const showHero = !hasResults && !state.isRunning && !state.error
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
@@ -59,25 +62,58 @@ export function ResearchPage() {
       </a>
 
       <div id="main-content" className="mx-auto max-w-5xl px-6 py-5">
-        <h1 className="text-2xl font-semibold text-text-primary mb-5">
-          SignalCore Vendor Research Tool
-        </h1>
+        {/* Header bar */}
+        <header className="flex items-center justify-between border-b border-border-default pb-4 mb-6">
+          <h1 className="text-2xl font-semibold text-text-primary m-0">
+            SignalCore Vendor Research Tool
+          </h1>
+          <ThemeToggle />
+        </header>
 
-        {/* Run Research Button */}
-        <button
-          onClick={startResearch}
-          disabled={state.isRunning}
-          className="bg-accent-primary text-white border-none px-6 py-3 text-base rounded-sm cursor-pointer mb-5 font-body-ui hover:bg-accent-primary-hover disabled:bg-text-tertiary disabled:cursor-not-allowed transition-colors"
-        >
-          {state.isRunning ? 'Running...' : 'Run Research'}
-        </button>
+        {/* Hero empty state */}
+        {showHero && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <h2 className="text-3xl font-heading font-semibold text-text-primary mb-3">
+              Vendor Research, Automated
+            </h2>
+            <p className="text-text-secondary text-lg max-w-md mb-8">
+              Compare vendors across your requirements with AI-powered research, scoring, and analysis.
+            </p>
+            <button
+              onClick={startResearch}
+              className="bg-accent-primary text-white border-none px-8 py-3.5 text-base rounded-sm cursor-pointer font-body-ui font-medium hover:bg-accent-primary-hover transition-colors"
+            >
+              Run Research
+            </button>
 
-        {/* Job History */}
-        <JobHistory onViewResults={loadResults} />
+            {/* Job History below hero */}
+            <div className="w-full mt-12">
+              <JobHistory onViewResults={loadResults} />
+            </div>
+          </div>
+        )}
+
+        {/* Inline controls when not in hero state */}
+        {!showHero && (
+          <>
+            <div className="flex items-center gap-3 mb-6">
+              <button
+                onClick={startResearch}
+                disabled={state.isRunning}
+                className="bg-accent-primary text-white border-none px-6 py-2.5 text-sm rounded-sm cursor-pointer font-body-ui font-medium hover:bg-accent-primary-hover disabled:bg-text-tertiary disabled:cursor-not-allowed transition-colors"
+              >
+                {state.isRunning ? 'Running...' : 'New Research'}
+              </button>
+            </div>
+
+            {/* Job History */}
+            <JobHistory onViewResults={loadResults} />
+          </>
+        )}
 
         {/* Pipeline Visualization (during research) */}
         {state.isRunning && (
-          <>
+          <div className="space-y-6 mt-6">
             <PipelineStepper
               stepStatuses={state.stepStatuses}
               elapsedTime={state.elapsedTime}
@@ -100,7 +136,7 @@ export function ResearchPage() {
               hasAuditData={hasAuditData}
               jobId={state.jobId}
             />
-          </>
+          </div>
         )}
 
         {/* Error Section */}
@@ -117,8 +153,8 @@ export function ResearchPage() {
         )}
 
         {/* Results */}
-        {state.results && (
-          <div>
+        {hasResults && (
+          <div className="space-y-6 mt-6">
             {/* Completed counters */}
             {isComplete && (
               <LiveCounters
@@ -141,21 +177,14 @@ export function ResearchPage() {
               jobId={state.jobId ?? viewedJobId}
             />
 
-            <ExecutiveSummary results={state.results} />
+            <ExecutiveSummary results={state.results!} />
 
             <ScoringMethodology />
 
-            <ComparisonMatrix results={state.results} onCellClick={openDrillDown} />
+            <ComparisonMatrix results={state.results!} onCellClick={openDrillDown} />
 
-            <PriorityWeights results={state.results} />
+            <PriorityWeights results={state.results!} />
           </div>
-        )}
-
-        {/* No results */}
-        {!state.results && !state.isRunning && !state.error && (
-          <p className="text-text-tertiary mt-5">
-            No research results to display. Click &ldquo;Run Research&rdquo; to start.
-          </p>
         )}
 
         {/* Drill-down Panel */}

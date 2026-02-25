@@ -22,7 +22,7 @@ export function ScoringMethodology() {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
-    <div className="mb-5 border border-border-default rounded-sm">
+    <div className="border border-border-default rounded-sm">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         aria-expanded={isExpanded}
