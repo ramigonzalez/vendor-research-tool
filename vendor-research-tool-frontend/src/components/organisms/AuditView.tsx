@@ -115,22 +115,29 @@ export function AuditView({
 }: AuditViewProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('timeline')
   const [historicalData, setHistoricalData] = useState<ReturnType<typeof hydrateFromAuditEvents> | null>(null)
-  const [loading, setLoading] = useState(false)
+  const shouldFetch = !hasAuditData && isComplete && !!jobId
+  const [loading, setLoading] = useState(shouldFetch)
+  const [isCollapsed, setIsCollapsed] = useState(isComplete)
+
+  // Collapse when isComplete transitions to true (React "store previous props" pattern)
+  const [prevIsComplete, setPrevIsComplete] = useState(isComplete)
+  if (isComplete && !prevIsComplete) {
+    setPrevIsComplete(true)
+    setIsCollapsed(true)
+  }
 
   // Fetch historical audit events when viewing a completed job without live data
   useEffect(() => {
-    if (!hasAuditData && isComplete && jobId) {
-      setLoading(true)
-      apiFetch<AuditEvent[]>(`/api/research/${jobId}/audit`)
-        .then(events => {
-          if (events.length > 0) {
-            setHistoricalData(hydrateFromAuditEvents(events))
-          }
-        })
-        .catch(() => { /* Audit data unavailable */ })
-        .finally(() => setLoading(false))
-    }
-  }, [hasAuditData, isComplete, jobId])
+    if (!shouldFetch) return
+    apiFetch<AuditEvent[]>(`/api/research/${jobId!}/audit`)
+      .then(events => {
+        if (events.length > 0) {
+          setHistoricalData(hydrateFromAuditEvents(events))
+        }
+      })
+      .catch(() => { /* Audit data unavailable */ })
+      .finally(() => setLoading(false))
+  }, [shouldFetch, jobId])
 
   // Use historical data if available, otherwise use live data
   const stepStatuses = historicalData?.stepStatuses ?? liveStepStatuses
@@ -143,7 +150,7 @@ export function AuditView({
 
   if (loading) {
     return (
-      <div className="my-4 p-4 bg-bg-secondary rounded-sm text-sm text-text-tertiary italic">
+      <div className="p-4 bg-bg-secondary rounded-sm text-sm text-text-tertiary italic">
         Loading audit trail...
       </div>
     )
@@ -151,7 +158,7 @@ export function AuditView({
 
   if (!hasData && isComplete) {
     return (
-      <div className="my-4 p-4 bg-bg-secondary rounded-sm text-sm text-text-tertiary italic">
+      <div className="p-4 bg-bg-secondary rounded-sm text-sm text-text-tertiary italic">
         Audit trail not available for this run.
       </div>
     )
@@ -170,57 +177,90 @@ export function AuditView({
     }
   }
 
+  // Summary text for the disclosure header
+  const summaryParts: string[] = []
+  if (sourceCount > 0) summaryParts.push(`${sourceCount} sources`)
+  if (queries.length > 0) summaryParts.push(`${queries.length} queries`)
+  const summaryText = summaryParts.length > 0 ? ` \u2014 ${summaryParts.join(', ')}` : ''
+
   return (
-    <div className="my-4 bg-bg-secondary rounded-sm border border-border-subtle overflow-hidden">
-      {/* Tab bar */}
-      <div role="tablist" className="flex border-b border-border-default" onKeyDown={handleKeyDown}>
-        {tabs.map(tab => {
-          const isActive = activeTab === tab.key
-          let count = ''
-          if (tab.key === 'queries') count = ` (${queries.length})`
-          if (tab.key === 'sources') count = ` (${sourceCount})`
-          if (tab.key === 'activity') count = ` (${activities.length})`
+    <div className="bg-bg-secondary rounded-sm border border-border-subtle overflow-hidden">
+      {/* Disclosure header */}
+      {isComplete ? (
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          aria-expanded={!isCollapsed}
+          className="w-full text-left px-4 py-3 bg-bg-secondary hover:bg-bg-primary transition-colors text-sm font-medium text-text-primary flex items-center justify-between cursor-pointer border-none"
+        >
+          <span>
+            Research Analysis{summaryText}
+          </span>
+          <span className={`text-text-tertiary transition-transform duration-fast ${isCollapsed ? '' : 'rotate-180'}`}>
+            {'\u25BC'}
+          </span>
+        </button>
+      ) : (
+        <div className="px-4 py-3 text-sm font-medium text-text-primary border-b border-border-default">
+          Research Analysis{summaryText}
+        </div>
+      )}
 
-          return (
-            <button
-              key={tab.key}
-              role="tab"
-              aria-selected={isActive}
-              aria-controls={`tabpanel-${tab.key}`}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2.5 text-sm cursor-pointer border-none bg-transparent transition-colors
-                ${isActive
-                  ? 'text-accent-primary border-b-2 border-b-accent-primary font-medium'
-                  : 'text-text-secondary hover:text-text-primary'
-                }
-                focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none
-              `}
-            >
-              {tab.label}{count}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Tab panels */}
+      {/* Collapsible content */}
       <div
-        role="tabpanel"
-        id={`tabpanel-${activeTab}`}
-        aria-labelledby={activeTab}
+        className={`transition-all duration-normal ease-smooth overflow-hidden ${
+          isComplete && isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[2000px] opacity-100'
+        }`}
       >
-        {activeTab === 'timeline' && (
-          <ResearchTimeline
-            stepStatuses={stepStatuses}
-            sources={sources}
-            sourceCount={sourceCount}
-            currentIteration={currentIteration}
-            isComplete={isComplete}
-          />
-        )}
-        {activeTab === 'queries' && <QueryHistory queries={queries} />}
-        {activeTab === 'sources' && <SourcesVisited sources={sources} />}
-        {activeTab === 'activity' && <ActivityFeed activities={activities} />}
+        {/* Tab bar */}
+        <div role="tablist" className="flex border-b border-border-default" onKeyDown={handleKeyDown}>
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.key
+            let count = ''
+            if (tab.key === 'queries') count = ` (${queries.length})`
+            if (tab.key === 'sources') count = ` (${sourceCount})`
+            if (tab.key === 'activity') count = ` (${activities.length})`
+
+            return (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`tabpanel-${tab.key}`}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-4 py-2.5 text-sm cursor-pointer border-none bg-transparent transition-colors
+                  ${isActive
+                    ? 'text-accent-primary border-b-2 border-b-accent-primary font-medium'
+                    : 'text-text-secondary hover:text-text-primary'
+                  }
+                  focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:outline-none
+                `}
+              >
+                {tab.label}{count}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Tab panels */}
+        <div
+          role="tabpanel"
+          id={`tabpanel-${activeTab}`}
+          aria-labelledby={activeTab}
+        >
+          {activeTab === 'timeline' && (
+            <ResearchTimeline
+              stepStatuses={stepStatuses}
+              sources={sources}
+              sourceCount={sourceCount}
+              currentIteration={currentIteration}
+              isComplete={isComplete}
+            />
+          )}
+          {activeTab === 'queries' && <QueryHistory queries={queries} />}
+          {activeTab === 'sources' && <SourcesVisited sources={sources} />}
+          {activeTab === 'activity' && <ActivityFeed activities={activities} />}
+        </div>
       </div>
     </div>
   )
