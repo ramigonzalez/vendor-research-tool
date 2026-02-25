@@ -1,12 +1,13 @@
 """Application configuration loaded from environment variables."""
 
 from __future__ import annotations
-
+from dotenv import load_dotenv
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
-
 from app.models import Priority, Requirement
 
+# Load .env into os.environ so LangSmith SDK picks up tracing config
+load_dotenv()
 
 class Settings(BaseSettings):
     """API keys and environment configuration."""
