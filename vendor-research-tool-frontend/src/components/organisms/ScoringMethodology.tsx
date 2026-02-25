@@ -63,7 +63,7 @@ export function ScoringMethodology() {
             <code className="block bg-bg-code-block px-3 py-2 rounded-xs text-xs font-mono text-text-primary mb-2">
               Confidence = Source Count (30%) + Authority (30%) + Recency (25%) + Consistency (15%)
             </code>
-            <WeightBar label="Source Count" weight={0.30} color="bg-confidence-high" />
+            <WeightBar label="Source Count" weight={0.30} color="bg-accent-primary" />
             <WeightBar label="Authority" weight={0.30} color="bg-accent-primary" />
             <WeightBar label="Recency" weight={0.25} color="bg-accent-tertiary" />
             <WeightBar label="Consistency" weight={0.15} color="bg-status-analyzing" />

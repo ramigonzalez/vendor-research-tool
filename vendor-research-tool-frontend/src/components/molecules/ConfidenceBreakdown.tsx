@@ -14,10 +14,11 @@ interface SegmentInfo {
   explanation: string
 }
 
-function getSegmentColor(value: number): string {
-  if (value >= 0.7) return 'bg-confidence-high'
-  if (value >= 0.4) return 'bg-confidence-medium'
-  return 'bg-confidence-low'
+const SEGMENT_COLORS: Record<string, string> = {
+  sourceCount: 'bg-accent-primary',
+  authority: 'bg-accent-tertiary',
+  recency: 'bg-status-analyzing',
+  consistency: 'bg-accent-secondary',
 }
 
 export function ConfidenceBreakdown({ evidence }: ConfidenceBreakdownProps) {
@@ -75,7 +76,7 @@ export function ConfidenceBreakdown({ evidence }: ConfidenceBreakdownProps) {
           return (
             <div
               key={seg.key}
-              className={`${getSegmentColor(seg.value)} transition-all duration-200 relative cursor-pointer`}
+              className={`${SEGMENT_COLORS[seg.key] || 'bg-text-tertiary'} transition-all duration-200 relative cursor-pointer`}
               style={{ width: `${Math.max(widthPct, 2)}%` }}
               onMouseEnter={() => setHoveredSegment(seg.key)}
               onMouseLeave={() => setHoveredSegment(null)}
@@ -97,7 +98,7 @@ export function ConfidenceBreakdown({ evidence }: ConfidenceBreakdownProps) {
       <div className="flex flex-wrap gap-3 text-[10px] text-text-tertiary">
         {segments.map(seg => (
           <span key={seg.key} className="inline-flex items-center gap-1">
-            <span className={`w-2.5 h-2.5 rounded-full ${getSegmentColor(seg.value)}`} />
+            <span className={`w-2.5 h-2.5 rounded-full ${SEGMENT_COLORS[seg.key] || 'bg-text-tertiary'}`} />
             {seg.label} ({(seg.weight * 100).toFixed(0)}%): {seg.value.toFixed(2)}
           </span>
         ))}

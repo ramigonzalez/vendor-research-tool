@@ -18,6 +18,8 @@
   --color-bg-user-message: #E8E6DF;
   --color-bg-code-block: #F8F7F4;
   --color-bg-timeline: #FAFAF7;
+  --color-bg-table-header: #2c3e50;
+  --color-bg-table-section: #f0efe9;
 
   --color-text-primary: #1a1a18;
   --color-text-secondary: #6b6a68;
@@ -134,6 +136,8 @@
     --color-bg-user-message: #3a3a3a;
     --color-bg-code-block: #2a2a2a;
     --color-bg-timeline: #1e1e1e;
+    --color-bg-table-header: #1e293b;
+    --color-bg-table-section: #2a2a2a;
 
     --color-text-primary: #f0f0f0;
     --color-text-secondary: #a0a0a0;
@@ -155,3 +159,21 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* --- Markdown Prose --- */
+.markdown-prose h1, .markdown-prose h2, .markdown-prose h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.markdown-prose h1 { font-size: 1.25rem; }
+.markdown-prose h2 { font-size: 1.125rem; }
+.markdown-prose h3 { font-size: 1rem; }
+.markdown-prose strong { font-weight: 600; }
+.markdown-prose a { color: var(--color-text-link); text-decoration: underline; }
+.markdown-prose ul { list-style: disc; padding-left: 1.25rem; }
+.markdown-prose ol { list-style: decimal; padding-left: 1.25rem; }
+.markdown-prose li { margin-bottom: 0.25rem; }
+.markdown-prose p { margin-bottom: 0.75rem; }

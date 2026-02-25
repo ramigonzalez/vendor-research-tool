@@ -13,6 +13,16 @@ const priorityLabels: Record<string, string> = {
   medium: 'Medium Priority',
   low: 'Low Priority',
 }
+const prioritySectionStyles: Record<string, string> = {
+  high: 'bg-confidence-high/10 border-l-4 border-l-confidence-high',
+  medium: 'bg-confidence-medium/10 border-l-4 border-l-confidence-medium',
+  low: 'bg-confidence-low/10 border-l-4 border-l-confidence-low',
+}
+const priorityBadgeLabel: Record<string, string> = {
+  high: 'H',
+  medium: 'M',
+  low: 'L',
+}
 
 function groupByPriority(requirements: Requirement[]): Record<string, Requirement[]> {
   const grouped: Record<string, Requirement[]> = {}
@@ -38,11 +48,11 @@ export function ComparisonMatrix({ results, onCellClick }: ComparisonMatrixProps
         <table className="border-collapse w-full min-w-[600px]">
           <thead>
             <tr>
-              <th className="bg-text-primary text-white text-xs p-2.5 text-left sticky top-0 z-10 border border-border-default">
+              <th className="bg-bg-table-header text-white text-xs p-2.5 text-left sticky top-0 z-10 border border-border-default">
                 Requirement
               </th>
               {sortedRankings.map(r => (
-                <th key={r.vendor} className="bg-text-primary text-white text-xs p-2.5 text-center sticky top-0 z-10 border border-border-default whitespace-pre-line">
+                <th key={r.vendor} className="bg-bg-table-header text-white text-xs p-2.5 text-center sticky top-0 z-10 border border-border-default whitespace-pre-line">
                   <Badge variant="rank">#{r.rank}</Badge>{' '}
                   {r.vendor}
                   {'\n'}({r.overall_score.toFixed(1)})
@@ -56,7 +66,7 @@ export function ComparisonMatrix({ results, onCellClick }: ComparisonMatrixProps
               if (reqs.length === 0) return null
               return (
                 <tr key={priority}>
-                  <td colSpan={vendors.length + 1} className="bg-[#34495e] text-white font-bold text-left p-2 text-sm border border-border-default">
+                  <td colSpan={vendors.length + 1} className={`${prioritySectionStyles[priority] || ''} text-text-primary font-bold text-left p-2 text-sm border border-border-default`}>
                     {priorityLabels[priority]}
                   </td>
                 </tr>
@@ -67,6 +77,8 @@ export function ComparisonMatrix({ results, onCellClick }: ComparisonMatrixProps
                 return reqs.map(req => (
                   <tr key={req.id} className="even:bg-bg-primary/50">
                     <td className="text-left font-medium bg-bg-primary min-w-[200px] p-2.5 text-sm border border-border-default">
+                      <Badge variant="priority">{priorityBadgeLabel[req.priority] || 'M'}</Badge>{' '}
+                      <span className="font-mono text-xs text-text-secondary">{req.id}</span>{' '}
                       {req.description}
                     </td>
                     {vendors.map(vendor => {
