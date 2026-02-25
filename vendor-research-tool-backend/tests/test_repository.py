@@ -411,3 +411,38 @@ async def test_save_score_replace_on_duplicate(repo: SQLiteResearchRepository) -
     results = await repo.get_results("job-1")
     assert results is not None
     assert results.matrix["vendorA"]["req-1"].score == 9.0
+
+
+async def test_get_results_resolves_requirement_descriptions(repo: SQLiteResearchRepository) -> None:
+    """get_results should resolve full descriptions and priorities from config for known requirement IDs."""
+    from app.config import REQUIREMENTS
+
+    await repo.create_job(_make_job())
+    # Use a known config requirement ID
+    await repo.save_score("job-1", "vendorA", "R1", _make_score(8.0))
+
+    results = await repo.get_results("job-1")
+    assert results is not None
+    assert len(results.requirements) == 1
+    req = results.requirements[0]
+    assert req.id == "R1"
+
+    # Should have full description from config, not just "R1"
+    config_req = next(r for r in REQUIREMENTS if r.id == "R1")
+    assert req.description == config_req.description
+    assert req.priority == config_req.priority
+
+
+async def test_get_results_fallback_for_unknown_requirement(repo: SQLiteResearchRepository) -> None:
+    """get_results should use ID as description and medium priority for unknown requirement IDs."""
+    from app.models import Priority
+
+    await repo.create_job(_make_job())
+    await repo.save_score("job-1", "vendorA", "UNKNOWN-REQ", _make_score(5.0))
+
+    results = await repo.get_results("job-1")
+    assert results is not None
+    req = results.requirements[0]
+    assert req.id == "UNKNOWN-REQ"
+    assert req.description == "UNKNOWN-REQ"
+    assert req.priority == Priority.medium

@@ -85,15 +85,16 @@ fi
 
 # 7. Database status
 echo ""
-if [ -f "research.db" ]; then
+mkdir -p data
+if [ -f "data/research.db" ]; then
   JOB_COUNT=$(python3 -c "
 import sqlite3
-conn = sqlite3.connect('research.db')
+conn = sqlite3.connect('data/research.db')
 count = conn.execute('SELECT COUNT(*) FROM jobs').fetchone()[0]
 print(count)
 conn.close()
 " 2>/dev/null || echo "0")
-  echo "[OK] Database exists (research.db) — $JOB_COUNT previous job(s)"
+  echo "[OK] Database exists (data/research.db) — $JOB_COUNT previous job(s)"
   echo "     NOTE: No need to delete — schema is stable and auto-initialized"
 else
   echo "[INFO] No database yet — will be created on first startup"
@@ -122,13 +123,13 @@ if lsof -ti:$PORT &>/dev/null; then
   fi
 fi
 
-# 9. Start the server (frontend is served at the same URL)
+# 9. Start the backend API server
 echo ""
 echo "======================================"
-echo "  Starting server..."
+echo "  Starting backend server..."
 echo "  Backend API:  http://localhost:$PORT/api/"
-echo "  Frontend UI:  http://localhost:$PORT/"
 echo "  Health check: http://localhost:$PORT/health"
+echo "  Frontend:     Run separately in vendor-research-tool-frontend/"
 echo "======================================"
 echo ""
 

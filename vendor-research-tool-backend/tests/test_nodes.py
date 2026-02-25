@@ -609,8 +609,10 @@ class TestExtractEvidence:
         req = Requirement(id="R1", description="Framework-agnostic tracing", priority=Priority.high)
         parser_instance = mock_parser
 
+        # Provide a minimal state dict with no progress_queue
+        mock_state: dict = {"vendors": [], "requirements": [], "progress_queue": None}
         _vendor, _req_id, _ev_list = await _extract_evidence_for_pair(
-            mock_llm, parser_instance, "LangSmith", req, raw_results
+            mock_llm, parser_instance, "LangSmith", req, raw_results, mock_state
         )
 
         # Verify the LLM was called and the content in the message is truncated

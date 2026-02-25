@@ -31,7 +31,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent.parent / "research.db"
+DB_PATH = Path(__file__).parent.parent / "data" / "research.db"
 
 _JOBS_TABLE = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -336,10 +336,17 @@ class SQLiteResearchRepository(ResearchRepository):
                 matrix.setdefault(vendor, {})[req_id] = score_result
 
             vendors = sorted(vendors_set)
-            # Build Requirement objects from req IDs (description not stored in scores,
-            # so we use the ID as a placeholder description)
+            # Resolve full descriptions and priorities from config
+            from app.config import REQUIREMENTS as _CONFIG_REQS
+
+            req_lookup = {r.id: r for r in _CONFIG_REQS}
             requirements = [
-                Requirement(id=rid, description=rid, priority=Priority.medium) for rid in sorted(req_ids_set)
+                Requirement(
+                    id=rid,
+                    description=req_lookup[rid].description if rid in req_lookup else rid,
+                    priority=req_lookup[rid].priority if rid in req_lookup else Priority.medium,
+                )
+                for rid in sorted(req_ids_set)
             ]
 
             return ResearchResults(

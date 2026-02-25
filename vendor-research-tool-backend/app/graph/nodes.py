@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -74,16 +75,14 @@ async def _generate_query_pair(
 
 
 async def generate_queries(state: ResearchState) -> dict:
-    """LangGraph node: generate search queries for all vendor-requirement pairs.
+    """LangGraph node: generate search queries for all vendor-requirement pairs."""
+    from app.graph.progress import emit_phase_end, emit_phase_start, emit_query_generated
 
-    Takes the current research state, generates two search queries per
-    vendor-requirement combination using an LLM, and returns a partial
-    state update with the queries dict.
-    """
     vendors: list[str] = state.get("vendors", [])
     requirements: list[Requirement] = state.get("requirements", [])
 
     logger.info("Generating queries for %d vendors x %d requirements", len(vendors), len(requirements))
+    await emit_phase_start(state, "planning")
 
     llm = get_llm()
     parser = JsonOutputParser()
@@ -100,8 +99,13 @@ async def generate_queries(state: ResearchState) -> dict:
     queries: dict[str, list[str]] = {}
     for key, query_list in results:
         queries[key] = query_list
+        # Emit granular event per query pair
+        parts = key.split(":")
+        if len(parts) == 2:
+            await emit_query_generated(state, parts[0], parts[1], query_list)
 
     logger.info("Generated %d query pairs", len(queries))
+    await emit_phase_end(state, "planning")
     return {"queries": queries}
 
 
@@ -114,19 +118,48 @@ from tavily import AsyncTavilyClient  # noqa: E402
 from app.graph.progress import emit_progress  # noqa: E402
 
 
+def _extract_domain(url: str) -> str:
+    """Extract domain from a URL, with fallback."""
+    try:
+        return urlparse(url).netloc or url
+    except Exception:
+        return url
+
+
 async def execute_searches(state: ResearchState) -> dict:
     """LangGraph node: execute all Tavily searches concurrently with rate limiting."""
+    from app.graph.progress import emit_iteration_start, emit_phase_end, emit_phase_start, emit_search_result
+
+    iteration = state.get("iteration", 0)
+    is_gap_fill = iteration > 0
+
     client = AsyncTavilyClient(api_key=settings.TAVILY_API_KEY)
     semaphore = asyncio.Semaphore(5)
     queries = state.get("queries", {})
     completed_count = 0
     total_searches = sum(len(qs) for qs in queries.values())
 
+    # Monotonic progress: iteration 0 uses 10-45%, iteration 1+ uses 45-50%
+    if is_gap_fill:
+        pct_start = 45
+        pct_range = 5  # Gap-fill gets a smaller range (45-50%)
+    else:
+        pct_start = 10
+        pct_range = 35  # Primary search gets 10-45%
+
+    if not is_gap_fill:
+        await emit_phase_start(state, "searching")
+    await emit_iteration_start(state, iteration + 1, total_searches, len(queries))
+
     raw_results: dict[str, list[dict]] = {}
 
     async def search_with_limit(key: str, query_idx: int, query: str) -> tuple[str, list[dict]]:
         nonlocal completed_count
         result_key = f"{key}:{query_idx}"
+        parts = key.split(":")
+        vendor = parts[0] if len(parts) >= 1 else ""
+        req_id = parts[1] if len(parts) >= 2 else ""
+
         async with semaphore:
             try:
                 results = await client.search(
@@ -136,10 +169,23 @@ async def execute_searches(state: ResearchState) -> dict:
                     include_raw_content=False,
                 )
                 completed_count += 1
+                search_results = results.get("results", [])
+
+                # Emit search_result events for each result
+                for sr in search_results:
+                    source_url = sr.get("url", "")
+                    source_name = sr.get("title", "")
+                    domain = _extract_domain(source_url)
+                    await emit_search_result(state, vendor, req_id, source_url, source_name, domain)
+
                 if completed_count % 5 == 0:
-                    pct = 10 + int(35 * completed_count / max(total_searches, 1))
-                    await emit_progress(state, "research", pct, f"Searching... ({completed_count}/{total_searches})")
-                return result_key, results.get("results", [])
+                    pct = pct_start + int(pct_range * completed_count / max(total_searches, 1))
+                    iter_label = f"Gap-fill (iter {iteration + 1}): " if is_gap_fill else ""
+                    await emit_progress(
+                        state, "research", pct,
+                        f"{iter_label}Searching... ({completed_count}/{total_searches})"
+                    )
+                return result_key, search_results
             except Exception as e:
                 logger.warning("Search failed for %s: %s", result_key, e)
                 completed_count += 1
@@ -158,7 +204,8 @@ async def execute_searches(state: ResearchState) -> dict:
     for result_key, result_list in results:
         raw_results[result_key] = result_list
 
-    await emit_progress(state, "research", 45, "Search complete, extracting evidence...")
+    final_pct = pct_start + pct_range
+    await emit_progress(state, "research", final_pct, "Search complete, extracting evidence...")
     return {"raw_results": raw_results}
 
 
@@ -179,8 +226,11 @@ async def _extract_evidence_for_pair(
     vendor: str,
     requirement: Requirement,
     raw_results: dict[str, list[dict]],
+    state: ResearchState,
 ) -> tuple[str, str, list[Evidence]]:
     """Extract evidence for a single vendor-requirement pair."""
+    from app.graph.progress import emit_warning
+
     req_id = requirement.id
 
     # Combine results from both query indices
@@ -245,21 +295,27 @@ async def _extract_evidence_for_pair(
             req_id,
             exc_info=True,
         )
+        # Emit warning event so frontend can display it
+        await emit_warning(state, vendor, req_id, f"Evidence extraction failed for {vendor}:{req_id}")
         return vendor, req_id, []
 
 
 async def extract_evidence(state: ResearchState) -> dict:
     """LangGraph node: extract structured Evidence from raw search results."""
+    from app.graph.progress import emit_evidence_extracted, emit_phase_end, emit_phase_start
+
     vendors = state.get("vendors", [])
     requirements = state.get("requirements", [])
     raw_results = state.get("raw_results", {})
+
+    await emit_phase_start(state, "analyzing")
 
     llm = get_llm()
     parser = JsonOutputParser()
 
     sem = asyncio.Semaphore(settings.LLM_CONCURRENCY)
     tasks = [
-        _throttled(sem, _extract_evidence_for_pair(llm, parser, vendor, req, raw_results))
+        _throttled(sem, _extract_evidence_for_pair(llm, parser, vendor, req, raw_results, state))
         for vendor in vendors
         for req in requirements
     ]
@@ -274,8 +330,16 @@ async def extract_evidence(state: ResearchState) -> dict:
         evidence[vendor][req_id] = ev_list
         total_items += len(ev_list)
 
+        # Emit granular evidence event
+        if ev_list:
+            claims = [e.claim[:100] for e in ev_list[:3]]
+            await emit_evidence_extracted(state, vendor, req_id, len(ev_list), claims)
+
     logger.info("Extracted %d evidence items", total_items)
     await emit_progress(state, "research", 50, "Evidence extraction complete")
+    await emit_phase_end(state, "analyzing")
+    # Also end searching phase after first extraction completes
+    await emit_phase_end(state, "searching")
     return {"evidence": evidence}
 
 
@@ -462,9 +526,13 @@ async def _assess_single_pair(
 
 async def assess_capabilities(state: ResearchState) -> dict:
     """LangGraph node: produce LLMAssessment for all vendor-requirement pairs."""
+    from app.graph.progress import emit_phase_end, emit_phase_start
+
     vendors = state.get("vendors", [])
     requirements = state.get("requirements", [])
     evidence_map = state.get("evidence", {})
+
+    await emit_phase_start(state, "scoring")
 
     llm = get_llm()
     parser = JsonOutputParser()
@@ -499,6 +567,8 @@ from app.scoring.engine import compute_confidence, compute_requirement_score  # 
 
 async def compute_scores(state: ResearchState) -> dict:
     """LangGraph node: compute scores for all vendor-requirement pairs."""
+    from app.graph.progress import emit_score_computed
+
     vendors = state.get("vendors", [])
     requirements = state.get("requirements", [])
     evidence_map = state.get("evidence", {})
@@ -525,6 +595,8 @@ async def compute_scores(state: ResearchState) -> dict:
                 evidence=ev,
             )
 
+            await emit_score_computed(state, vendor, req.id, score, confidence)
+
     logger.info("Scores computed for %d vendors", len(scores))
     await emit_progress(state, "scoring", 80, "Score computation complete")
     return {"scores": scores}
@@ -539,12 +611,22 @@ from app.scoring.engine import compute_vendor_rankings  # noqa: E402
 
 async def compute_rankings(state: ResearchState) -> dict:
     """LangGraph node: compute weighted vendor rankings."""
+    from app.graph.progress import emit_phase_end, emit_phase_start, emit_vendor_ranked
+
+    await emit_phase_start(state, "ranking")
+
     scores = state.get("scores", {})
     requirements = state.get("requirements", [])
     rankings = compute_vendor_rankings(scores, requirements)
     ranking_summary = ", ".join(f"#{r.rank} {r.vendor} ({r.overall_score:.1f})" for r in rankings)
     logger.info("Rankings: %s", ranking_summary)
+
+    for r in rankings:
+        await emit_vendor_ranked(state, r.vendor, r.rank, r.overall_score)
+
     await emit_progress(state, "scoring", 85, "Rankings computed")
+    await emit_phase_end(state, "ranking")
+    await emit_phase_end(state, "scoring")
     return {"rankings": rankings}
 
 
@@ -557,6 +639,10 @@ from app.prompts.synthesis import SUMMARY_GENERATION_SYSTEM_PROMPT, SUMMARY_GENE
 
 async def generate_summary(state: ResearchState) -> dict:
     """LangGraph node: generate executive summary from evaluation results."""
+    from app.graph.progress import emit_phase_end, emit_phase_start
+
+    await emit_phase_start(state, "writing")
+
     vendors = state.get("vendors", [])
     requirements = state.get("requirements", [])
     rankings = state.get("rankings", [])
@@ -595,4 +681,5 @@ async def generate_summary(state: ResearchState) -> dict:
 
     logger.info("Summary generated")
     await emit_progress(state, "synthesis", 95, "Summary generated")
+    await emit_phase_end(state, "writing")
     return {"summary": summary}

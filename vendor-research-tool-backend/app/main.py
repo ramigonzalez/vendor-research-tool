@@ -1,14 +1,12 @@
-"""FastAPI application with static file serving and database initialization."""
+"""FastAPI application with CORS and database initialization."""
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.api.router import router
 from app.config import settings
@@ -17,11 +15,13 @@ from app.repository import create_db_and_tables
 
 logger = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).parent.parent / "static"
+ALLOWED_ORIGINS = os.environ.get(
+    "ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Initialize database on startup."""
     setup_logging()
     await create_db_and_tables()
@@ -33,21 +33,12 @@ app = FastAPI(title="SignalCore Vendor Research Tool", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(router)
-
-# Mount static files
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-
-@app.get("/")
-async def root() -> FileResponse:
-    """Serve the frontend."""
-    return FileResponse(str(STATIC_DIR / "index.html"))
 
 
 @app.get("/health")
