@@ -1,0 +1,218 @@
+# Vendor Research Tool — Design Tokens
+# Source of truth for all design values
+# Generated: 2026-02-24
+# Based on competitive analysis of: Perplexity, ChatGPT, Claude, Grok
+
+# ============================================================
+# TYPOGRAPHY
+# ============================================================
+typography:
+  font-family:
+    heading: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    body-ai: "'Source Serif 4', Georgia, ui-serif, 'Times New Roman', serif"
+    body-ui: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif"
+    mono: "'JetBrains Mono', Consolas, Monaco, 'Courier New', monospace"
+
+  font-size:
+    xs: "12px"    # 0.75rem
+    sm: "14px"    # 0.875rem
+    base: "16px"  # 1rem
+    lg: "18px"    # 1.125rem
+    xl: "20px"    # 1.25rem
+    2xl: "24px"   # 1.5rem
+    3xl: "30px"   # 1.875rem
+
+  font-weight:
+    regular: 400
+    medium: 500
+    semibold: 600
+    bold: 700
+
+  line-height:
+    tight: "16px"   # xs text
+    snug: "20px"     # sm text
+    normal: "24px"   # base text
+    relaxed: "28px"  # lg/xl text
+    loose: "32px"    # 2xl text
+    hero: "36px"     # 3xl text
+
+  content:
+    max-width: "42rem"  # 672px — optimal reading width
+
+# ============================================================
+# COLORS
+# ============================================================
+colors:
+  # --- Light Mode ---
+  light:
+    bg:
+      primary: "#F5F4EF"      # Warm off-white (Claude-inspired)
+      secondary: "#FFFFFF"     # Cards, surfaces
+      elevated: "#FFFFFF"      # Modals, popovers
+      user-message: "#E8E6DF"  # User bubble
+      ai-message: "transparent"
+      code-block: "#F8F7F4"    # Code block background
+      timeline: "#FAFAF7"      # Research timeline background
+
+    text:
+      primary: "#1a1a18"       # Near black
+      secondary: "#6b6a68"     # Muted
+      tertiary: "#9a9893"      # Captions, timestamps
+      inverse: "#FFFFFF"       # Text on accent bg
+      link: "#1a8a7d"          # Link text
+
+    border:
+      default: "#e0ddd5"
+      subtle: "#ebe8e0"
+      focus: "#1a8a7d"
+
+  # --- Dark Mode ---
+  dark:
+    bg:
+      primary: "#1a1a1a"       # Deep dark (Perplexity-inspired)
+      secondary: "#242424"     # Cards, surfaces
+      elevated: "#2e2e2e"      # Modals, popovers
+      user-message: "#3a3a3a"  # User bubble
+      ai-message: "transparent"
+      code-block: "#2a2a2a"    # Code block background
+      timeline: "#1e1e1e"      # Research timeline background
+
+    text:
+      primary: "#f0f0f0"       # Near white
+      secondary: "#a0a0a0"    # Muted
+      tertiary: "#707070"      # Captions, timestamps
+      inverse: "#1a1a18"       # Text on light accent bg
+      link: "#2bc4b4"          # Link text (brighter for dark bg)
+
+    border:
+      default: "#3a3a3a"
+      subtle: "#2e2e2e"
+      focus: "#2bc4b4"
+
+  # --- Accent (mode-independent) ---
+  accent:
+    primary: "#1a8a7d"          # Teal-green (Perplexity + ChatGPT blend)
+    primary-hover: "#157a6e"
+    primary-active: "#126b60"
+    secondary: "#c05a35"        # Warm terracotta (Claude-inspired)
+    secondary-hover: "#a84e2e"
+    tertiary: "#0079cb"         # Info blue (Grok-inspired)
+    tertiary-hover: "#006ab5"
+
+  # --- Status ---
+  status:
+    searching: "#1a8a7d"       # Teal — active search
+    reading: "#2196F3"         # Blue — reading sources
+    analyzing: "#9C27B0"       # Purple — analysis/reasoning
+    writing: "#c05a35"         # Terracotta — synthesizing
+    complete: "#4CAF50"        # Green — done
+    error: "#E53935"           # Red — error
+    warning: "#FF9800"         # Orange — warning
+
+  # --- Source Confidence ---
+  confidence:
+    high: "#4CAF50"
+    medium: "#FF9800"
+    low: "#E53935"
+
+# ============================================================
+# SPACING
+# ============================================================
+spacing:
+  1: "4px"
+  2: "8px"
+  3: "12px"
+  4: "16px"
+  5: "20px"
+  6: "24px"
+  8: "32px"
+  10: "40px"
+  12: "48px"
+  16: "64px"
+
+# ============================================================
+# LAYOUT
+# ============================================================
+layout:
+  sidebar-width: "240px"
+  content-max-width: "42rem"      # 672px
+  activity-panel-width: "320px"
+  border-radius:
+    xs: "4px"      # Tags, badges
+    sm: "8px"      # Buttons, pills
+    md: "12px"     # Cards, containers
+    lg: "16px"     # Modals, large panels
+    full: "9999px" # Fully rounded (pills)
+
+# ============================================================
+# SHADOWS
+# ============================================================
+shadows:
+  sm: "0 1px 2px rgba(0, 0, 0, 0.05)"
+  md: "0 4px 12px rgba(0, 0, 0, 0.08)"
+  lg: "0 8px 24px rgba(0, 0, 0, 0.12)"
+  composer: "0 0.25rem 1.25rem rgba(0, 0, 0, 0.035)"
+
+# ============================================================
+# ANIMATION
+# ============================================================
+animation:
+  duration:
+    instant: "100ms"
+    fast: "200ms"
+    normal: "300ms"
+    slow: "500ms"
+    streaming: "50ms"   # Per-token delay
+
+  easing:
+    default: "cubic-bezier(0.165, 0.85, 0.45, 1)"   # Organic (Claude)
+    bounce: "cubic-bezier(0.34, 1.56, 0.64, 1)"      # Playful
+    smooth: "cubic-bezier(0.4, 0, 0.2, 1)"            # Material
+
+  keyframes:
+    shimmer:
+      description: "Thinking indicator shimmer effect"
+      from: "background-position: -200% 0"
+      to: "background-position: 200% 0"
+      duration: "1.5s"
+      iteration: "infinite"
+
+    token-fade-in:
+      description: "Streaming text token entrance"
+      from: "opacity: 0.3"
+      to: "opacity: 1"
+      duration: "var(--duration-instant)"
+
+    step-pulse:
+      description: "Active research step indicator"
+      keyframes: "0%,100% opacity:1; 50% opacity:0.5"
+      duration: "1.5s"
+      iteration: "infinite"
+
+    pill-enter:
+      description: "Source pill entrance animation"
+      from: "opacity:0; translateY(8px) scale(0.95)"
+      to: "opacity:1; translateY(0) scale(1)"
+      duration: "var(--duration-fast)"
+
+# ============================================================
+# Z-INDEX
+# ============================================================
+z-index:
+  base: 0
+  dropdown: 10
+  sticky: 20
+  overlay: 30
+  modal: 40
+  toast: 50
+  tooltip: 60
+
+# ============================================================
+# BREAKPOINTS
+# ============================================================
+breakpoints:
+  sm: "640px"
+  md: "768px"
+  lg: "1024px"
+  xl: "1280px"
+  2xl: "1536px"
