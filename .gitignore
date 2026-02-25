@@ -1,3 +1,5 @@
+# Project
+tmp/
 
 # Environment & Secrets (AIOS)
 .env
