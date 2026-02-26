@@ -13,6 +13,7 @@ import { AuditView } from '../organisms/AuditView'
 import { LiveCounters } from '../molecules/LiveCounters'
 import { PriorityWeights } from '../molecules/PriorityWeights'
 import { ThemeToggle } from '../atoms/ThemeToggle'
+import { ErrorBoundary } from '../atoms/ErrorBoundary'
 
 export function ResearchPage() {
   const { state, startResearch, setResults } = useResearchState()
@@ -155,39 +156,41 @@ export function ResearchPage() {
 
         {/* Results */}
         {hasResults && (
-          <div className="space-y-6 mt-6">
-            {/* Completed counters */}
-            {isComplete && (
-              <LiveCounters
+          <ErrorBoundary>
+            <div className="space-y-6 mt-6">
+              {/* Completed counters */}
+              {isComplete && (
+                <LiveCounters
+                  sourceCount={state.sourceCount}
+                  elapsedTime={state.elapsedTime}
+                  isComplete={true}
+                />
+              )}
+
+              {/* Audit View (post-research — live data or historical fetch) */}
+              <AuditView
+                stepStatuses={state.stepStatuses}
+                sources={state.sources}
                 sourceCount={state.sourceCount}
-                elapsedTime={state.elapsedTime}
+                queries={state.queries}
+                activities={state.activities}
+                currentIteration={state.currentIteration}
                 isComplete={true}
+                hasAuditData={hasAuditData}
+                jobId={state.jobId ?? viewedJobId}
               />
-            )}
 
-            {/* Audit View (post-research — live data or historical fetch) */}
-            <AuditView
-              stepStatuses={state.stepStatuses}
-              sources={state.sources}
-              sourceCount={state.sourceCount}
-              queries={state.queries}
-              activities={state.activities}
-              currentIteration={state.currentIteration}
-              isComplete={true}
-              hasAuditData={hasAuditData}
-              jobId={state.jobId ?? viewedJobId}
-            />
+              <VendorRankings rankings={state.results!.rankings} />
 
-            <VendorRankings rankings={state.results!.rankings} />
+              <ComparisonMatrix results={state.results!} onCellClick={openDrillDown} />
 
-            <ComparisonMatrix results={state.results!} onCellClick={openDrillDown} />
+              <ExecutiveSummary results={state.results!} />
 
-            <ExecutiveSummary results={state.results!} />
+              <ScoringMethodology />
 
-            <ScoringMethodology />
-
-            <PriorityWeights results={state.results!} />
-          </div>
+              <PriorityWeights results={state.results!} />
+            </div>
+          </ErrorBoundary>
         )}
 
         {/* Drill-down Panel */}

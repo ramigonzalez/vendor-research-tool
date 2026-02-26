@@ -23,7 +23,7 @@ export function PriorityWeights({ results }: PriorityWeightsProps) {
   const { rankings, requirements } = results
   const [isExpanded, setIsExpanded] = useState(false)
 
-  if (!rankings || rankings.length === 0) return null
+  if (!rankings || rankings.length === 0 || !requirements) return null
 
   const sortedRankings = [...rankings].sort((a, b) => a.rank - b.rank)
 

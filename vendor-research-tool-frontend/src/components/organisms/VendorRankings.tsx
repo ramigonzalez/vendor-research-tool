@@ -5,9 +5,9 @@ interface VendorRankingsProps {
 }
 
 export function VendorRankings({ rankings }: VendorRankingsProps) {
-  const sortedRankings = [...rankings].sort((a, b) => a.rank - b.rank)
+  if (!rankings || rankings.length === 0) return null
 
-  if (sortedRankings.length === 0) return null
+  const sortedRankings = [...rankings].sort((a, b) => a.rank - b.rank)
 
   return (
     <div className="bg-bg-secondary rounded-sm shadow-sm border border-border-subtle p-6">
