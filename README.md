@@ -71,13 +71,14 @@ Create a `.env` file in `vendor-research-tool-backend/` (or copy `.env.example`)
 ```env
 # Provider selection
 LLM_PROVIDER=openrouter
-LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
+LLM_MODEL=openrouter/auto
 LLM_TEMPERATURE=0
 
 # API keys (set all you have; only the active provider's key is required)
-OPENROUTER_API_KEY=sk-or-xxx
 ANTHROPIC_API_KEY=sk-ant-xxx
 OPENAI_API_KEY=sk-xxx
+OPENROUTER_API_KEY=sk-or-xxx
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
 # Always required
 TAVILY_API_KEY=tvly-xxx
@@ -255,12 +256,12 @@ All research parameters are defined in `vendor-research-tool-backend/app/config.
 
 ### LLM Provider
 
-The LLM provider is configurable via environment variables. The default is **OpenRouter** with a free Llama model for zero-cost prototyping.
+The LLM provider is configurable via environment variables. The default is **OpenRouter** with `openrouter/auto` model.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LLM_PROVIDER` | `openrouter` | Active provider: `openrouter`, `anthropic`, or `openai` |
-| `LLM_MODEL` | `meta-llama/llama-3.3-70b-instruct:free` | Model name for the selected provider |
+| `LLM_MODEL` | `openrouter/auto` | Model name for the selected provider |
 | `LLM_TEMPERATURE` | `0` | Sampling temperature |
 | `OPENROUTER_API_KEY` | | Required when `LLM_PROVIDER=openrouter` |
 | `ANTHROPIC_API_KEY` | | Required when `LLM_PROVIDER=anthropic` |
@@ -271,7 +272,7 @@ The LLM provider is configurable via environment variables. The default is **Ope
 ```env
 # Free prototyping (default — no changes needed)
 LLM_PROVIDER=openrouter
-LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
+LLM_MODEL=openrouter/auto
 
 # Premium Anthropic results
 LLM_PROVIDER=anthropic
@@ -508,7 +509,7 @@ The core design principle is **prevention-first scoring**: the LLM never generat
 
 ### How AI Tools Were Used
 
-This project was built using [Claude Code](https://claude.com/claude-code) with Synkra AIOS, an AI orchestration framework that coordinates specialized agents (`@dev`, `@qa`, `@architect`) around a story-driven development workflow.
+This project was built using [Claude Code](https://claude.com/claude-code) with Synkra AIOS, an AI orchestration framework that coordinates specialized agents (`@dev`, `@qa`, `@architect`, `@pm`, `@sm`, `@ux-designer`) around a story-driven development workflow.
 
 **What worked well.** Working through architecture decisions with Claude *before writing any code* was the highest-leverage use of AI in this project. The three documents in `docs/initial-documentation/` capture the reasoning behind every major choice -- Tavily vs. alternatives, hybrid scoring, SSE transport, repository pattern, evidence sufficiency thresholds -- all worked through interactively before implementation started. No architectural regrets after the fact. From there, roughly 80% of the codebase was generated through the `@dev` agent following those plans, with the author reviewing, correcting, and verifying outputs. The test suite (14 test files, type checking, linting) was largely AI-generated, which is where the time savings are most reliable -- test logic is mechanical enough to verify quickly.
 
