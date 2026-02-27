@@ -5,6 +5,11 @@ export type CapabilityLevel = 'full' | 'partial' | 'minimal' | 'none' | 'unknown
 export type MaturityLevel = 'ga' | 'beta' | 'experimental' | 'planned' | 'unknown';
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type Priority = 'high' | 'medium' | 'low';
+export type SummaryFormat = 'formal' | 'informal' | 'concise' | 'direct';
+
+export interface RegenerateSummaryResponse {
+  summary: string;
+}
 
 export interface Evidence {
   claim: string;

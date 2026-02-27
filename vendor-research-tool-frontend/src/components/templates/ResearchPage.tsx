@@ -184,7 +184,7 @@ export function ResearchPage() {
 
               <ComparisonMatrix results={state.results!} onCellClick={openDrillDown} />
 
-              <ExecutiveSummary results={state.results!} />
+              <ExecutiveSummary results={state.results!} jobId={state.jobId ?? viewedJobId} />
 
               <ScoringMethodology />
 
