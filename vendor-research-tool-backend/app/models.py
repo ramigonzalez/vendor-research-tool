@@ -38,6 +38,15 @@ class MaturityLevel(str, Enum):
     unknown = "unknown"
 
 
+class SummaryFormat(str, Enum):
+    """Available writing formats for executive summary generation."""
+
+    formal = "formal"
+    informal = "informal"
+    concise = "concise"
+    direct = "direct"
+
+
 class JobStatus(str, Enum):
     """Research job status."""
 

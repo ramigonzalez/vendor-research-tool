@@ -660,7 +660,7 @@ async def compute_rankings(state: ResearchState) -> dict:
 # Story 4.4 - Executive Summary Generation
 # ---------------------------------------------------------------------------
 
-from app.prompts.synthesis import SUMMARY_GENERATION_SYSTEM_PROMPT, SUMMARY_GENERATION_USER_TEMPLATE  # noqa: E402
+from app.prompts.synthesis import SUMMARY_GENERATION_SYSTEM_PROMPT, build_summary_context  # noqa: E402
 
 
 async def generate_summary(state: ResearchState) -> dict:
@@ -674,24 +674,7 @@ async def generate_summary(state: ResearchState) -> dict:
     rankings = state.get("rankings", [])
     scores = state.get("scores", {})
 
-    # Build score highlights
-    highlights: list[str] = []
-    for r in rankings:
-        vendor = r.vendor
-        vendor_scores = scores.get(vendor, {})
-        top_reqs = sorted(vendor_scores.items(), key=lambda x: -x[1].score)[:3]
-        for req_id, sr in top_reqs:
-            highlights.append(f"{vendor} - {req_id}: {sr.score:.1f}/10 (confidence: {sr.confidence:.2f})")
-
-    req_summary = ", ".join(f"{r.id}: {r.description} ({r.priority.value})" for r in requirements)
-    rank_summary = ", ".join(f"#{r.rank} {r.vendor} ({r.overall_score:.1f})" for r in rankings)
-
-    user_content = SUMMARY_GENERATION_USER_TEMPLATE.format(
-        vendors=", ".join(vendors),
-        requirements=req_summary,
-        rankings=rank_summary,
-        score_highlights="\n".join(highlights[:12]),
-    )
+    user_content = build_summary_context(vendors, requirements, rankings, scores)
 
     try:
         llm = get_llm()

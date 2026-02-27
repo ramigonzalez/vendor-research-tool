@@ -8,10 +8,14 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel
 
+from app.config import get_llm
 from app.graph.pipeline import run_pipeline
 from app.graph.state import build_initial_state
-from app.models import JobStatus, ResearchJob
+from app.models import JobStatus, ResearchJob, SummaryFormat
+from app.prompts.synthesis import SUMMARY_FORMAT_PROMPTS, build_summary_context
 from app.repository import ResearchRepository, get_repository
 
 logger = logging.getLogger(__name__)
@@ -112,3 +116,55 @@ async def get_audit_events(
 
     events = await repo.get_audit_events(job_id)
     return events
+
+
+# ---------------------------------------------------------------------------
+# Regenerate Summary (Story 14.1)
+# ---------------------------------------------------------------------------
+
+
+class RegenerateSummaryRequest(BaseModel):
+    """Request body for the regenerate-summary endpoint."""
+
+    format: SummaryFormat = SummaryFormat.formal
+
+
+@router.post("/api/research/{job_id}/regenerate-summary")
+async def regenerate_summary(
+    job_id: str,
+    body: RegenerateSummaryRequest,
+    repo: ResearchRepository = Depends(get_repository),  # noqa: B008
+):
+    """Regenerate the executive summary in a different writing format."""
+    job = await repo.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.completed:
+        raise HTTPException(status_code=400, detail="Job is not completed")
+
+    results = await repo.get_results(job_id)
+    if results is None:
+        raise HTTPException(status_code=500, detail="Results not found for completed job")
+
+    # Build LLM context from stored results
+    scores: dict[str, dict[str, object]] = results.matrix
+    user_content = build_summary_context(
+        results.vendors, results.requirements, results.rankings, scores
+    )
+
+    system_prompt = SUMMARY_FORMAT_PROMPTS[body.format.value]
+
+    try:
+        llm = get_llm()
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_content),
+        ]
+        result = await llm.ainvoke(messages)
+        new_summary = str(result.content)
+    except Exception as exc:
+        logger.error("Summary regeneration failed job_id=%s: %s", job_id, exc)
+        raise HTTPException(status_code=500, detail=f"LLM error: {exc}") from exc
+
+    await repo.update_summary(job_id, new_summary)
+    return {"summary": new_summary}

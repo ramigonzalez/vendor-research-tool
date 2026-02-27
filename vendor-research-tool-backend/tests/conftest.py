@@ -95,6 +95,9 @@ class MockResearchRepository(ResearchRepository):
         jobs = sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True)
         return [j.model_copy() for j in jobs[:limit]]
 
+    async def update_summary(self, job_id: str, summary: str) -> None:
+        self._summaries[job_id] = summary
+
     async def save_final_results(self, job_id: str, summary: str, rankings: list[VendorRanking]) -> None:
         self._summaries[job_id] = summary
         self._rankings[job_id] = rankings

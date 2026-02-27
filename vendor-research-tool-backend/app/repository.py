@@ -150,6 +150,9 @@ class ResearchRepository(ABC):
     async def list_jobs(self, limit: int = 50) -> list[ResearchJob]: ...
 
     @abstractmethod
+    async def update_summary(self, job_id: str, summary: str) -> None: ...
+
+    @abstractmethod
     async def save_final_results(self, job_id: str, summary: str, rankings: list[VendorRanking]) -> None: ...
 
     @abstractmethod
@@ -247,6 +250,16 @@ class SQLiteResearchRepository(ResearchRepository):
                     score_result.justification,
                     json.dumps(score_result.limitations),
                 ),
+            )
+            await db.commit()
+
+    async def update_summary(self, job_id: str, summary: str) -> None:
+        """Update only the summary column for a job (does NOT touch completed_at, status, or rankings_json)."""
+        logger.debug("Updating summary job_id=%s", job_id)
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "UPDATE jobs SET summary = ? WHERE id = ?",
+                (summary, job_id),
             )
             await db.commit()
 
